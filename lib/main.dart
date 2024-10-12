@@ -1,30 +1,3 @@
-// BEFORE APPLYING THE AUTH WRAPPER | UNTUK CEK USER-NYA SEDANG LOGIN ATAU TIDAK
-// import 'package:flutter/material.dart';
-// import 'SalesCustomerEnrollment.dart';
-// import '../widgets/network_error_handler.dart';
-// import 'package:firebase_core/firebase_core.dart';
-//
-// void main() async {
-//   WidgetsFlutterBinding.ensureInitialized();
-//   await Firebase.initializeApp();
-//   runApp(MyApp());
-// }
-//
-// class MyApp extends StatelessWidget {
-//   @override
-//   Widget build(BuildContext context) {
-//     return NetworkErrorHandler(
-//       child: MaterialApp(
-//         title: 'Restaurant Sales App',
-//         theme: ThemeData(
-//           primarySwatch: Colors.blue,
-//         ),
-//         home: SalesCustomerEnrollmentPage(),
-//       ),
-//     );
-//   }
-// }
-
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
