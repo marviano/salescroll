@@ -2,24 +2,40 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
-import 'burger_menu.dart';
-import 'loading_overlay.dart';
-import 'package:salescroll/env.dart';
-import 'alternating_color_listview.dart';
+import 'widgets/burger_menu.dart';
+import 'widgets/loading_overlay.dart';
+import 'package:salescroll/services/env.dart';
+import 'services/alternating_color_listview.dart';
 import 'RestaurantPackages.dart';
+import 'widgets/network_error_handler.dart';
 
-class MasterRestaurantPage extends StatelessWidget {
+class MasterRestaurantPage extends StatefulWidget {
+  @override
+  _MasterRestaurantPageState createState() => _MasterRestaurantPageState();
+}
+
+class _MasterRestaurantPageState extends State<MasterRestaurantPage> {
+  final GlobalKey<_MasterRestaurantFormState> _formKey = GlobalKey<_MasterRestaurantFormState>();
+
   @override
   Widget build(BuildContext context) {
-    return BurgerMenu(
-      topBarTitle: "Master Restaurant",
-      activePage: ActivePage.masterRestaurant,
-      child: MasterRestaurantForm(),
+    return NetworkErrorHandler(
+      child: BurgerMenu(
+        topBarTitle: "Master Restaurant",
+        activePage: ActivePage.masterRestaurant,
+        onRefresh: _refreshPage,
+        child: MasterRestaurantForm(key: _formKey),
+      ),
     );
+  }
+
+  void _refreshPage() {
+    _formKey.currentState?.refreshPage();
   }
 }
 
 class MasterRestaurantForm extends StatefulWidget {
+  MasterRestaurantForm({Key? key}) : super(key: key);
   @override
   _MasterRestaurantFormState createState() => _MasterRestaurantFormState();
 }
@@ -64,7 +80,8 @@ class _MasterRestaurantFormState extends State<MasterRestaurantForm> {
         throw Exception('Failed to load restaurants');
       }
     } catch (e) {
-      _showErrorDialog('Failed to fetch restaurants: $e');
+      NetworkErrorNotifier.instance.notifyError();
+      // _showErrorDialog('Failed to fetch restaurants: $e');
     } finally {
       setState(() => _isSearching = false);
     }
@@ -75,6 +92,10 @@ class _MasterRestaurantFormState extends State<MasterRestaurantForm> {
     _debounce = Timer(const Duration(milliseconds: 500), () {
       _fetchRestaurants();
     });
+  }
+
+  void refreshPage() {
+    _refreshPage();
   }
 
   Future<void> _toggleRestaurantStatus(String id) async {
@@ -89,7 +110,8 @@ class _MasterRestaurantFormState extends State<MasterRestaurantForm> {
         throw Exception('Failed to toggle restaurant status');
       }
     } catch (e) {
-      _showErrorDialog('Failed to toggle restaurant status: $e');
+      NetworkErrorNotifier.instance.notifyError();
+      // _showErrorDialog('Failed to toggle restaurant status: $e');
     } finally {
       setState(() => _isLoading = false);
     }
@@ -112,7 +134,8 @@ class _MasterRestaurantFormState extends State<MasterRestaurantForm> {
           throw Exception('Failed to add restaurant: ${response.statusCode} - ${response.body}');
         }
       } catch (e) {
-        _showErrorDialog('Failed to add restaurant: $e');
+        NetworkErrorNotifier.instance.notifyError();
+        // _showErrorDialog('Failed to add restaurant: $e');
       } finally {
         setState(() => _isLoading = false);
       }
@@ -136,7 +159,8 @@ class _MasterRestaurantFormState extends State<MasterRestaurantForm> {
           throw Exception('Failed to update restaurant: ${response.statusCode} - ${response.body}');
         }
       } catch (e) {
-        _showErrorDialog('Failed to update restaurant: $e');
+        NetworkErrorNotifier.instance.notifyError();
+        // _showErrorDialog('Failed to update restaurant: $e');
       } finally {
         setState(() => _isLoading = false);
       }
@@ -169,6 +193,20 @@ class _MasterRestaurantFormState extends State<MasterRestaurantForm> {
         ],
       ),
     );
+  }
+
+  void _refreshPage() {
+    setState(() {
+      _isLoading = false;
+      _isSearching = false;
+      _isEditing = false;
+      _restaurants = [];
+      _selectedRestaurantId = null;
+      _selectedStatus = 'active';
+      _nameController.clear();
+      _searchController.clear();
+    });
+    _fetchRestaurants();
   }
 
   Widget _buildRestaurantList() {

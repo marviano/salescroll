@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
-import 'package:salescroll/env.dart';
-import 'alternating_color_listview.dart';
-import 'loading_overlay.dart';
+import 'package:salescroll/services/env.dart';
+import 'services/alternating_color_listview.dart';
+import 'widgets/loading_overlay.dart';
+import 'widgets/burger_menu.dart';
+import 'widgets/network_error_handler.dart';
 
 class RestaurantPackages extends StatefulWidget {
   final String restaurantId;
@@ -65,7 +67,7 @@ class _RestaurantPackagesState extends State<RestaurantPackages> {
       }
     } catch (e) {
       print('Error fetching packages: $e');
-      _showErrorDialog('Failed to fetch packages: $e');
+      NetworkErrorNotifier.instance.notifyError();
     } finally {
       setState(() => _isSearching = false);
     }
@@ -90,7 +92,7 @@ class _RestaurantPackagesState extends State<RestaurantPackages> {
         throw Exception('Failed to toggle package status');
       }
     } catch (e) {
-      _showErrorDialog('Failed to toggle package status: $e');
+      NetworkErrorNotifier.instance.notifyError();
     } finally {
       setState(() => _isLoading = false);
     }
@@ -118,7 +120,7 @@ class _RestaurantPackagesState extends State<RestaurantPackages> {
           throw Exception('Failed to add package: ${response.statusCode} - ${response.body}');
         }
       } catch (e) {
-        _showErrorDialog('Failed to add package: $e');
+        NetworkErrorNotifier.instance.notifyError();
       } finally {
         setState(() => _isLoading = false);
       }
@@ -146,7 +148,7 @@ class _RestaurantPackagesState extends State<RestaurantPackages> {
           throw Exception('Failed to update package: ${response.statusCode} - ${response.body}');
         }
       } catch (e) {
-        _showErrorDialog('Failed to update package: $e');
+        NetworkErrorNotifier.instance.notifyError();
       } finally {
         setState(() => _isLoading = false);
       }
@@ -165,10 +167,6 @@ class _RestaurantPackagesState extends State<RestaurantPackages> {
       _selectedPackageId = null;
       _clearForm();
     });
-  }
-
-  void _showErrorDialog(String message) {
-    _showDialog('Error', message);
   }
 
   void _showDialog(String title, String content) {
@@ -221,116 +219,138 @@ class _RestaurantPackagesState extends State<RestaurantPackages> {
     );
   }
 
+  void refreshPage() {
+    setState(() {
+      _isLoading = false;
+      _isSearching = false;
+      _isEditing = false;
+      _packages = [];
+      _selectedPackageId = null;
+      _selectedStatus = 'active';
+      _clearForm();
+      _searchController.clear();
+    });
+    _fetchPackages();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Packages for ${widget.restaurantName}'),
-      ),
-      body: LoadingOverlay(
-        isLoading: _isLoading,
-        loadingText: 'Please wait...',
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Form(
-                key: _formKey,
-                child: Column(
+    return NetworkErrorHandler(
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text('Packages for ${widget.restaurantName}'),
+          actions: [
+            IconButton(
+              icon: Icon(Icons.refresh),
+              onPressed: refreshPage,
+            ),
+          ],
+        ),
+        body: LoadingOverlay(
+          isLoading: _isLoading,
+          loadingText: 'Please wait...',
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Form(
+                  key: _formKey,
+                  child: Column(
+                    children: [
+                      TextFormField(
+                        decoration: InputDecoration(labelText: 'Package Name'),
+                        controller: _nameController,
+                        validator: (value) => value?.isEmpty ?? true ? 'Please enter package name' : null,
+                      ),
+                      TextFormField(
+                        decoration: InputDecoration(labelText: 'Description'),
+                        controller: _descriptionController,
+                        maxLines: 3,
+                      ),
+                      TextFormField(
+                        decoration: InputDecoration(labelText: 'Price'),
+                        controller: _priceController,
+                        keyboardType: TextInputType.numberWithOptions(decimal: true),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter a price';
+                          }
+                          if (double.tryParse(value) == null) {
+                            return 'Please enter a valid number';
+                          }
+                          return null;
+                        },
+                      ),
+                      SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          ElevatedButton(
+                            onPressed: _isEditing ? null : _submitForm,
+                            child: Text('Add'),
+                          ),
+                          ElevatedButton(
+                            onPressed: _isEditing ? _updatePackage : null,
+                            child: Text('Update'),
+                          ),
+                          if (_isEditing)
+                            ElevatedButton(
+                              onPressed: _cancelUpdate,
+                              child: Text('Cancel Update'),
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 20),
+                Divider(thickness: 1, color: Colors.grey[300]),
+                SizedBox(height: 20),
+                TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    labelText: 'Search Packages',
+                    suffixIcon: Icon(Icons.search),
+                  ),
+                  onChanged: _onSearchChanged,
+                ),
+                SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    TextFormField(
-                      decoration: InputDecoration(labelText: 'Package Name'),
-                      controller: _nameController,
-                      validator: (value) => value?.isEmpty ?? true ? 'Please enter package name' : null,
-                    ),
-                    TextFormField(
-                      decoration: InputDecoration(labelText: 'Description'),
-                      controller: _descriptionController,
-                      maxLines: 3,
-                    ),
-                    TextFormField(
-                      decoration: InputDecoration(labelText: 'Price'),
-                      controller: _priceController,
-                      keyboardType: TextInputType.numberWithOptions(decimal: true),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter a price';
-                        }
-                        if (double.tryParse(value) == null) {
-                          return 'Please enter a valid number';
-                        }
-                        return null;
+                    FilterChip(
+                      label: Text('All'),
+                      selected: _selectedStatus == 'all',
+                      onSelected: (selected) {
+                        setState(() => _selectedStatus = 'all');
+                        _fetchPackages();
                       },
                     ),
-                    SizedBox(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        ElevatedButton(
-                          onPressed: _isEditing ? null : _submitForm,
-                          child: Text('Add'),
-                        ),
-                        ElevatedButton(
-                          onPressed: _isEditing ? _updatePackage : null,
-                          child: Text('Update'),
-                        ),
-                        if (_isEditing)
-                          ElevatedButton(
-                            onPressed: _cancelUpdate,
-                            child: Text('Cancel Update'),
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                          ),
-                      ],
+                    FilterChip(
+                      label: Text('Active'),
+                      selected: _selectedStatus == 'active',
+                      onSelected: (selected) {
+                        setState(() => _selectedStatus = 'active');
+                        _fetchPackages();
+                      },
+                    ),
+                    FilterChip(
+                      label: Text('Inactive'),
+                      selected: _selectedStatus == 'inactive',
+                      onSelected: (selected) {
+                        setState(() => _selectedStatus = 'inactive');
+                        _fetchPackages();
+                      },
                     ),
                   ],
                 ),
-              ),
-              SizedBox(height: 20),
-              Divider(thickness: 1, color: Colors.grey[300]),
-              SizedBox(height: 20),
-              TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  labelText: 'Search Packages',
-                  suffixIcon: Icon(Icons.search),
-                ),
-                onChanged: _onSearchChanged,
-              ),
-              SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  FilterChip(
-                    label: Text('All'),
-                    selected: _selectedStatus == 'all',
-                    onSelected: (selected) {
-                      setState(() => _selectedStatus = 'all');
-                      _fetchPackages();
-                    },
-                  ),
-                  FilterChip(
-                    label: Text('Active'),
-                    selected: _selectedStatus == 'active',
-                    onSelected: (selected) {
-                      setState(() => _selectedStatus = 'active');
-                      _fetchPackages();
-                    },
-                  ),
-                  FilterChip(
-                    label: Text('Inactive'),
-                    selected: _selectedStatus == 'inactive',
-                    onSelected: (selected) {
-                      setState(() => _selectedStatus = 'inactive');
-                      _fetchPackages();
-                    },
-                  ),
-                ],
-              ),
-              SizedBox(height: 20),
-              Text('Packages:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              _buildPackageList(),
-            ],
+                SizedBox(height: 20),
+                Text('Packages:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                _buildPackageList(),
+              ],
+            ),
           ),
         ),
       ),

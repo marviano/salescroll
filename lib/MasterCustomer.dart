@@ -2,23 +2,40 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
-import 'burger_menu.dart';
-import 'loading_overlay.dart';
-import 'package:salescroll/env.dart';
-import 'alternating_color_listview.dart';
+import 'widgets/burger_menu.dart';
+import 'widgets/loading_overlay.dart';
+import 'package:salescroll/services/env.dart';
+import 'services/alternating_color_listview.dart';
+import 'widgets/network_error_handler.dart';
 
-class MasterCustomerPage extends StatelessWidget {
+class MasterCustomerPage extends StatefulWidget {
+  @override
+  _MasterCustomerPageState createState() => _MasterCustomerPageState();
+}
+
+class _MasterCustomerPageState extends State<MasterCustomerPage> {
+  final GlobalKey<_MasterCustomerFormState> _formKey = GlobalKey<_MasterCustomerFormState>();
+
   @override
   Widget build(BuildContext context) {
-    return BurgerMenu(
-      topBarTitle: "Master Customer",
-      activePage: ActivePage.masterCustomer,
-      child: MasterCustomerForm(),
+    return NetworkErrorHandler(
+      child: BurgerMenu(
+        topBarTitle: "Master Customer",
+        activePage: ActivePage.masterCustomer,
+        onRefresh: _refreshPage,
+        child: MasterCustomerForm(key: _formKey),
+      ),
     );
+  }
+
+  void _refreshPage() {
+    _formKey.currentState?.refreshPage();
   }
 }
 
 class MasterCustomerForm extends StatefulWidget {
+  MasterCustomerForm({Key? key}) : super(key: key);
+
   @override
   _MasterCustomerFormState createState() => _MasterCustomerFormState();
 }
@@ -66,7 +83,7 @@ class _MasterCustomerFormState extends State<MasterCustomerForm> {
         throw Exception('Failed to load customers');
       }
     } catch (e) {
-      _showErrorDialog('Failed to fetch customers: $e');
+      NetworkErrorNotifier.instance.notifyError();
     } finally {
       setState(() => _isSearching = false);
     }
@@ -100,7 +117,7 @@ class _MasterCustomerFormState extends State<MasterCustomerForm> {
           throw Exception('Failed to add customer: ${response.statusCode} - ${response.body}');
         }
       } catch (e) {
-        _showErrorDialog('Failed to add customer: $e');
+        NetworkErrorNotifier.instance.notifyError();
       } finally {
         setState(() => _isLoading = false);
       }
@@ -128,7 +145,7 @@ class _MasterCustomerFormState extends State<MasterCustomerForm> {
           throw Exception('Failed to update customer: ${response.statusCode} - ${response.body}');
         }
       } catch (e) {
-        _showErrorDialog('Failed to update customer: $e');
+        NetworkErrorNotifier.instance.notifyError();
       } finally {
         setState(() => _isLoading = false);
       }
@@ -147,10 +164,6 @@ class _MasterCustomerFormState extends State<MasterCustomerForm> {
     _nameController.clear();
     _phoneNumberController.clear();
     _addressController.clear();
-  }
-
-  void _showErrorDialog(String message) {
-    _showDialog('Error', message);
   }
 
   void _showDialog(String title, String content) {
@@ -193,6 +206,19 @@ class _MasterCustomerFormState extends State<MasterCustomerForm> {
         ),
       )).toList(),
     );
+  }
+
+  void refreshPage() {
+    setState(() {
+      _isLoading = false;
+      _isSearching = false;
+      _isEditing = false;
+      _customers = [];
+      _selectedCustomerId = null;
+      _clearForm();
+      _searchController.clear();
+    });
+    _fetchCustomers();
   }
 
   @override

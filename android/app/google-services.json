@@ -1,0 +1,218 @@
+{
+  "project_info": {
+    "project_number": "484519518330",
+    "project_id": "m2mobileapp-401507",
+    "storage_bucket": "m2mobileapp-401507.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:484519518330:android:3c460f553bc931efbd5bc3",
+        "android_client_info": {
+          "package_name": "com.marviano.gogochicken"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "484519518330-1rsncpj2lhebuag6rjs2950167r70ebk.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.marviano.gogochicken",
+            "certificate_hash": "06a0e319f4006ca023cd3cbfdaa0ca122b63585e"
+          }
+        },
+        {
+          "client_id": "484519518330-ek3ben88s32e9059uv4gcmglb27idccb.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.marviano.gogochicken",
+            "certificate_hash": "9bbb3186b2189ef16d8f272bdab59362c395cbb4"
+          }
+        },
+        {
+          "client_id": "484519518330-mtnhjeoiqjf07tnhe5bjqac7nnig1m0e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAQ6ZUXczHzYl-BXMLcJ-l4Ksu_J_P3dss"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "484519518330-mtnhjeoiqjf07tnhe5bjqac7nnig1m0e.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "484519518330-0oaoc2a2ktaafprb8p84js5083ol8rkc.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.marviano.fcmobileapp"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:484519518330:android:0c88b615fe6aa50bbd5bc3",
+        "android_client_info": {
+          "package_name": "com.marviano.gogochicken_backend"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "484519518330-6q027dt6d4u9hq09er95ddhr06caldhv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.marviano.gogochicken_backend",
+            "certificate_hash": "06a0e319f4006ca023cd3cbfdaa0ca122b63585e"
+          }
+        },
+        {
+          "client_id": "484519518330-8fkud46lj404v63q47lajtmpv6ccjk44.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.marviano.gogochicken_backend",
+            "certificate_hash": "9bbb3186b2189ef16d8f272bdab59362c395cbb4"
+          }
+        },
+        {
+          "client_id": "484519518330-mtnhjeoiqjf07tnhe5bjqac7nnig1m0e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAQ6ZUXczHzYl-BXMLcJ-l4Ksu_J_P3dss"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "484519518330-mtnhjeoiqjf07tnhe5bjqac7nnig1m0e.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "484519518330-0oaoc2a2ktaafprb8p84js5083ol8rkc.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.marviano.fcmobileapp"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:484519518330:android:cb65509e8cbbcbffbd5bc3",
+        "android_client_info": {
+          "package_name": "com.marviano.m2mobileapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "484519518330-382fphiqjr9epd12nf1qnv8as65cgrns.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.marviano.m2mobileapp",
+            "certificate_hash": "9bbb3186b2189ef16d8f272bdab59362c395cbb4"
+          }
+        },
+        {
+          "client_id": "484519518330-b3rj7uh269q250sabbscfo92lpbu89a2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.marviano.m2mobileapp",
+            "certificate_hash": "796068cc334cb8b0345777197d755473c9383463"
+          }
+        },
+        {
+          "client_id": "484519518330-s1evq836qfrf0u7gvc9ckuvj1oc91tgq.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.marviano.m2mobileapp",
+            "certificate_hash": "55c093bbbdef0c1fb44cad2d942c3e8a127baf4d"
+          }
+        },
+        {
+          "client_id": "484519518330-mtnhjeoiqjf07tnhe5bjqac7nnig1m0e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAQ6ZUXczHzYl-BXMLcJ-l4Ksu_J_P3dss"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "484519518330-mtnhjeoiqjf07tnhe5bjqac7nnig1m0e.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "484519518330-0oaoc2a2ktaafprb8p84js5083ol8rkc.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.marviano.fcmobileapp"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:484519518330:android:ea7d9167c53a069cbd5bc3",
+        "android_client_info": {
+          "package_name": "com.marviano.salescroll"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "484519518330-r7k8ipn2mkr45hto2079229g7p8jl79c.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.marviano.salescroll",
+            "certificate_hash": "9fc11a3753222d688696d2c04a30e55996edd4c4"
+          }
+        },
+        {
+          "client_id": "484519518330-mtnhjeoiqjf07tnhe5bjqac7nnig1m0e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAQ6ZUXczHzYl-BXMLcJ-l4Ksu_J_P3dss"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "484519518330-mtnhjeoiqjf07tnhe5bjqac7nnig1m0e.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "484519518330-0oaoc2a2ktaafprb8p84js5083ol8rkc.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.marviano.fcmobileapp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

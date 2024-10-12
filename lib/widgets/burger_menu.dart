@@ -1,9 +1,13 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:salescroll/MasterCustomer.dart';
-import 'SalesCustomerEnrollment.dart';
-import 'CustomerRegistration.dart';
-import 'MasterRestaurant.dart';
-import 'MasterCustomer.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+// import 'package:salescroll/MasterCustomer.dart';
+import '../SalesCustomerEnrollment.dart';
+import '../CustomerRegistration.dart';
+import '../MasterRestaurant.dart';
+import '../MasterCustomer.dart';
+import '../CheckOrder.dart';
+import '../login.dart';
 
 enum ActivePage {
   salesCustomerEnrollment,
@@ -11,19 +15,49 @@ enum ActivePage {
   masterPackage,
   masterRestaurant,
   masterCustomer,
+  checkOrder,
+  login,
 }
 
 class BurgerMenu extends StatelessWidget {
   final Widget child;
   final String topBarTitle;
   final ActivePage activePage;
+  final VoidCallback? onRefresh;
 
   const BurgerMenu({
     Key? key,
     required this.child,
     required this.topBarTitle,
     required this.activePage,
+    this.onRefresh,
   }) : super(key: key);
+
+  Future<void> _handleLogout(BuildContext context) async {
+    try {
+      // Sign out from Firebase
+      await FirebaseAuth.instance.signOut();
+
+      // Sign out from Google
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+      await googleSignIn.signOut();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Logged out successfully')),
+      );
+
+      // Navigate to LoginPage and remove all previous routes
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => LoginPage()),
+            (Route<dynamic> route) => false,
+      );
+    } catch (e) {
+      print('Error during logout: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to log out. Please try again.')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +70,13 @@ class BurgerMenu extends StatelessWidget {
           ),
         ),
         title: Text(topBarTitle),
+        actions: [
+          if (onRefresh != null)
+            IconButton(
+              icon: Icon(Icons.refresh),
+              onPressed: onRefresh,
+            ),
+        ],
       ),
       drawer: Drawer(
         child: ListView(
@@ -73,16 +114,16 @@ class BurgerMenu extends StatelessWidget {
                 MaterialPageRoute(builder: (context) => CustomerRegistrationPage()),
               ),
             ),
-            // _buildListTile(
-            //   context,
-            //   'Master Paket',
-            //   Icons.inventory,
-            //   ActivePage.masterPackage,
-            //       () {
-            //     // Add navigation to Master Paket page when it's created
-            //     Navigator.pop(context);
-            //   },
-            // ),
+            _buildListTile(
+              context,
+              'Check Order',
+              Icons.list_alt,
+              ActivePage.checkOrder,
+                  () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => CheckOrderPage()),
+              ),
+            ),
             _buildListTile(
               context,
               'Master Restaurant',
@@ -102,6 +143,22 @@ class BurgerMenu extends StatelessWidget {
                 context,
                 MaterialPageRoute(builder: (context) => MasterCustomerPage()),
               ),
+            ),
+            // _buildListTile(
+            //   context,
+            //   'Login',
+            //   Icons.login,
+            //   ActivePage.login,
+            //       () => Navigator.push(
+            //     context,
+            //     MaterialPageRoute(builder: (context) => LoginPage()),
+            //   ),
+            // ),
+            Divider(),
+            ListTile(
+              leading: Icon(Icons.logout),
+              title: Text('Logout'),
+              onTap: () => _handleLogout(context),
             ),
           ],
         ),

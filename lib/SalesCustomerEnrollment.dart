@@ -1,11 +1,14 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'burger_menu.dart';
-import 'package:salescroll/env.dart';
+import 'widgets/burger_menu.dart';
+import 'package:salescroll/services/env.dart';
 import 'dart:async';
-import 'loading_overlay.dart';
+import 'widgets/loading_overlay.dart';
+import 'widgets/network_error_handler.dart';
+import 'package:flutter_typeahead/flutter_typeahead.dart';
 
 class SalesCustomerEnrollmentPage extends StatefulWidget {
   @override
@@ -13,73 +16,158 @@ class SalesCustomerEnrollmentPage extends StatefulWidget {
 }
 
 class _SalesCustomerEnrollmentPageState extends State<SalesCustomerEnrollmentPage> {
+  final GlobalKey<_SalesCustomerEnrollmentFormState> _formKey = GlobalKey<_SalesCustomerEnrollmentFormState>();
+
+  void _refreshPage() {
+    _formKey.currentState?.resetForm();
+    // Add any additional refresh logic here
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return NetworkErrorHandler(
+      child: BurgerMenu(
+        topBarTitle: "Pendaftaran Order",
+        activePage: ActivePage.salesCustomerEnrollment,
+        onRefresh: _refreshPage,
+        child: SalesCustomerEnrollmentForm(key: _formKey),
+      ),
+    );
+  }
+}
+
+class SalesCustomerEnrollmentForm extends StatefulWidget {
+  SalesCustomerEnrollmentForm({Key? key}) : super(key: key);
+
+  @override
+  _SalesCustomerEnrollmentFormState createState() => _SalesCustomerEnrollmentFormState();
+}
+
+class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentForm> {
   final _formKey = GlobalKey<FormState>();
-  // final _packageController = TextEditingController();
   final _searchController = TextEditingController();
   final _nameController = TextEditingController();
   final _addressController = TextEditingController();
   final _phoneController = TextEditingController();
+
   String? _selectedCustomerId;
   String? _selectedRestaurantId;
-
-  final _restaurantController = TextEditingController();
-  List<Map<String, dynamic>> _restaurantSearchResults = [];
-  List<Package> _availablePackages = [];
-  bool _isRestaurantLoading = false;
-  Timer? _restaurantDebounce;
-  bool _isRestaurantTyping = false;
-  bool _isRestaurantFieldFocused = false;
-  bool _isPackagesLoading = false;
-  bool _isLoading = false;
-  bool _isSubmitting = false;
-
-  List<Restaurant> _availableRestaurants = [];
-  Restaurant? _selectedRestaurant;
-  bool _isRestaurantsLoading = true;  // Change this line
-
-  Package? _selectedPackage;
-  List<SelectedPackage> _selectedPackages = [];
-  DateTime? _deliveryDateTime;
-  List<Map<String, dynamic>> _searchResults = [];
-  Timer? _debounce;
-  bool _isTyping = false;
-  bool _isFieldFocused = false;
-
-  final List<String> _restaurants = ['Lombok Idjoe', 'IClub', '2 Fat Guys', 'Ueno'];
-
-  int _calculateTotalPrice() {
-    return _selectedPackages.fold(0, (total, selectedPackage) =>
-    total + (selectedPackage.package.priceInCents * selectedPackage.quantity));
-  }
-
   String _formatPrice(int priceInCents) {
     final formatter = NumberFormat.currency(
       locale: 'id_ID',
       symbol: 'Rp ',
       decimalDigits: 0,
     );
-    return formatter.format(priceInCents / 100);
+    return formatter.format(priceInCents);
+  }
+
+  List<Restaurant> _availableRestaurants = [];
+  List<Package> _availablePackages = [];
+  List<SelectedPackage> _selectedPackages = [];
+  List<Map<String, dynamic>> _searchResults = [];
+  List<OrderPurpose> _purposeOptions = [];
+
+  Map<String, dynamic>? _selectedCustomer;
+
+  bool _isPackagesLoading = false;
+  bool _isLoading = false;
+  bool _isSubmitting = false;
+  bool _isTyping = false;
+  bool _isFieldFocused = false;
+  bool _isRestaurantsLoading = true;
+  bool _isCustomerSelected = false;
+
+  Restaurant? _selectedRestaurant;
+  Package? _selectedPackage;
+  DateTime? _deliveryDateTime;
+  Timer? _debounce;
+  OrderPurpose? _selectedPurpose;
+
+  int _calculateTotalPrice() {
+    return _selectedPackages.fold(0, (total, selectedPackage) =>
+    total + (selectedPackage.package.priceInCents * selectedPackage.quantity));
   }
 
   @override
   void initState() {
     super.initState();
+    _setupListeners();
+    _fetchRestaurants();
+    _fetchPurposes();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LoadingOverlay(
+      isLoading: _isSubmitting,
+      loadingText: "Menyimpan pesanan...",
+      child: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(16.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildCustomerSearchField(),
+                _buildCustomerDetails(),
+                SizedBox(height: 20),
+                _buildPurposeDropdown(),
+                SizedBox(height: 20),
+                _buildRestaurantDropdown(),
+                SizedBox(height: 20),
+                _buildPackageSelection(),
+                SizedBox(height: 20),
+                _buildSelectedPackages(),
+                SizedBox(height: 20),
+                _buildTotalPrice(),
+                SizedBox(height: 20),
+                _buildDeliveryDateTime(),
+                SizedBox(height: 20),
+                _buildSubmitButton(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void resetForm() {
+    setState(() {
+      _selectedCustomerId = null;
+      _selectedRestaurantId = null;
+      _selectedPackages.clear();
+      _searchResults.clear();
+      _deliveryDateTime = null;
+      _nameController.clear();
+      _addressController.clear();
+      _phoneController.clear();
+      _searchController.clear();
+      _selectedRestaurant = null;
+      _selectedPackage = null;
+      _selectedPurpose = null;
+      _isPackagesLoading = false;
+      _isLoading = false;
+      _isSubmitting = false;
+      _isTyping = false;
+      _isFieldFocused = false;
+      _isRestaurantsLoading = true;
+      _isCustomerSelected = false;
+      _selectedCustomer = null;
+      _availablePackages.clear();
+    });
+    _formKey.currentState?.reset();
+    _fetchRestaurants();
+    _fetchPurposes();
+  }
+
+  void _setupListeners() {
     _nameController.addListener(() {
       print("DEBUG: Name listener triggered with text: ${_nameController.text}");
       _onSearchChanged(_nameController.text);
     });
-    // Add this listener for restaurant search
-    print("DEBUG: Calling _fetchRestaurants() from initState");
-    _fetchRestaurants();
-    // _restaurantController.addListener(() {
-    //   _onRestaurantSearchChanged(_restaurantController.text);
-    // });
-    // _addressController.addListener(() {
-    //   print("DEBUG: Address listener triggered with text: ${_addressController.text}");
-    // });
-    // _phoneController.addListener(() {
-    //   print("DEBUG: Phone listener triggered with text: ${_phoneController.text}");
-    // });
   }
 
   void _showDescription(BuildContext context, String description) {
@@ -104,118 +192,16 @@ class _SalesCustomerEnrollmentPageState extends State<SalesCustomerEnrollmentPag
     );
   }
 
-  void _onRestaurantSearchChanged(String query) async {
-    setState(() {
-      _isRestaurantTyping = query.isNotEmpty;
-    });
-    if (_restaurantDebounce?.isActive ?? false) _restaurantDebounce!.cancel();
-    _restaurantDebounce = Timer(const Duration(milliseconds: 500), () async {
-      if (query.isEmpty || !_isRestaurantFieldFocused) {
-        setState(() {
-          _restaurantSearchResults = [];
-          _isRestaurantLoading = false;
-          _isRestaurantTyping = false;
-        });
-        return;
-      }
-
-      setState(() {
-        _isRestaurantLoading = true;
-      });
-
-      try {
-        final response = await http.get(
-          Uri.parse('${Env.apiUrl}/api/restaurants/search?query=$query'),
-        );
-
-        if (response.statusCode == 200) {
-          final List<dynamic> results = json.decode(response.body);
-          setState(() {
-            _restaurantSearchResults = results.map((result) => {
-              'id': result['id'],
-              'name': result['name'], // Use 'name' instead of 'restaurant_name'
-            }).toList();
-            _isRestaurantLoading = false;
-            _isRestaurantTyping = false;
-          });
-          print("DEBUG: Parsed restaurant results: $_restaurantSearchResults");
-        } else {
-          throw Exception('Failed to load restaurant search results');
-        }
-      } catch (e) {
-        print("Error in _onRestaurantSearchChanged: $e");
-        setState(() {
-          _restaurantSearchResults = [];
-          _isRestaurantLoading = false;
-          _isRestaurantTyping = false;
-        });
-      }
-    });
-  }
-
-  void _onSearchChanged(String query) async {
-    print("DEBUG: _onSearchChanged called with query: '$query'");
-    setState(() {
-      _isTyping = query.isNotEmpty;
-    });
-    if (_debounce?.isActive ?? false) _debounce!.cancel();
-    _debounce = Timer(const Duration(milliseconds: 500), () async {
-      if (query.isEmpty || !_isFieldFocused) {
-        print("DEBUG: Query is empty or field is not focused, clearing results");
-        setState(() {
-          _searchResults = [];
-          _isLoading = false;
-          _isTyping = false;
-        });
-        return;
-      }
-
-      setState(() {
-        _isLoading = true;
-      });
-
-      try {
-        final url = '${Env.apiUrl}/api/customers/search?query=$query';
-        print("DEBUG: Sending request to $url");
-        final response = await http.get(Uri.parse(url));
-
-        print("DEBUG: Received response with status code: ${response.statusCode}");
-        print("DEBUG: Response headers: ${response.headers}");
-        print("DEBUG: Raw response body: ${response.body}");
-
-        if (response.statusCode == 200) {
-          final List<dynamic> results = json.decode(response.body);
-          setState(() {
-            _searchResults = results.cast<Map<String, dynamic>>();
-            _isLoading = false;
-            _isTyping = false;
-          });
-          print("DEBUG: Updated search results, count: ${_searchResults.length}");
-          print("DEBUG: First result (if any): ${_searchResults.isNotEmpty ? _searchResults.first : 'No results'}");
-        } else {
-          print("DEBUG: Non-200 status code received");
-          throw Exception('Failed to load search results: ${response.statusCode} ${response.reasonPhrase}');
-        }
-      } catch (e, stackTrace) {
-        print("DEBUG: Error in _onSearchChanged: $e");
-        print("DEBUG: Stack trace: $stackTrace");
-        setState(() {
-          _isLoading = false;
-          _isTyping = false;
-        });
-        // Consider showing an error message to the user here
-      }
-    });
-  }
-
   void _selectCustomer(Map<String, dynamic> customer) {
     setState(() {
-      _selectedCustomerId = customer['id'];  // Save the customer ID
+      _selectedCustomer = customer;
+      _selectedCustomerId = customer['id'];
       _nameController.text = customer['name'];
       _addressController.text = customer['address'];
       _phoneController.text = customer['phone_number'];
       _searchResults = [];
       _isTyping = false;
+      _isCustomerSelected = true;
     });
     FocusScope.of(context).unfocus();
   }
@@ -227,13 +213,18 @@ class _SalesCustomerEnrollmentPageState extends State<SalesCustomerEnrollmentPag
       _selectedRestaurantId = restaurant?.id;
       _selectedPackage = null;
       _selectedPackages.clear();
-      _availablePackages.clear();
+      _availablePackages = [];
+      _isPackagesLoading = true;
     });
     if (restaurant != null) {
       print("DEBUG: Calling _fetchPackagesForRestaurant with ID: ${restaurant.id}");
       _fetchPackagesForRestaurant(restaurant.id);
+    } else {
+      print("DEBUG: No restaurant selected, clearing packages");
+      setState(() {
+        _isPackagesLoading = false;
+      });
     }
-    FocusScope.of(context).unfocus();
   }
 
   void _submitForm() async {
@@ -241,7 +232,20 @@ class _SalesCustomerEnrollmentPageState extends State<SalesCustomerEnrollmentPag
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
 
-      // Check if delivery date and time are selected
+      if (_selectedCustomer == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Mohon pilih pelanggan dari daftar')),
+        );
+        return;
+      }
+
+      if (_selectedPurpose == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Mohon pilih keperluan')),
+        );
+        return;
+      }
+
       if (_deliveryDateTime == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Mohon pilih tanggal dan waktu pengiriman')),
@@ -249,7 +253,6 @@ class _SalesCustomerEnrollmentPageState extends State<SalesCustomerEnrollmentPag
         return;
       }
 
-      // Show confirmation modal
       showDialog(
         context: context,
         builder: (BuildContext context) {
@@ -259,12 +262,13 @@ class _SalesCustomerEnrollmentPageState extends State<SalesCustomerEnrollmentPag
             selectedPackages: _selectedPackages,
             deliveryDateTime: _deliveryDateTime!,
             totalPrice: _calculateTotalPrice(),
+            purpose: _selectedPurpose!,
             onConfirm: () {
-              Navigator.of(context).pop(); // Close the modal
-              _processOrder(); // Process the order
+              Navigator.of(context).pop();
+              _processOrder();
             },
             onCancel: () {
-              Navigator.of(context).pop(); // Close the modal
+              Navigator.of(context).pop();
             },
           );
         },
@@ -277,16 +281,32 @@ class _SalesCustomerEnrollmentPageState extends State<SalesCustomerEnrollmentPag
       _isSubmitting = true;
     });
 
-    // Prepare the data
+    // Get the current user's UID
+    final User? user = FirebaseAuth.instance.currentUser;
+    final String? firebaseUid = user?.uid;
+
+    if (firebaseUid == null) {
+      // Handle the case where the user is not logged in
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('User not logged in. Please log in and try again.')),
+      );
+      setState(() {
+        _isSubmitting = false;
+      });
+      return;
+    }
+
     final orderData = {
       'id_customer': _selectedCustomerId,
       'id_restaurant': _selectedRestaurantId,
+      'id_order_purpose': _selectedPurpose!.id.toString(),
       'delivery_datetime': _deliveryDateTime!.toIso8601String(),
       'order_items': _selectedPackages.map((sp) => {
         'id_package': sp.package.id,
         'quantity': sp.quantity,
         'price': sp.package.priceInCents,
       }).toList(),
+      'firebase_uid': firebaseUid, // Add the Firebase UID to the order data
     };
 
     try {
@@ -301,7 +321,6 @@ class _SalesCustomerEnrollmentPageState extends State<SalesCustomerEnrollmentPag
       });
 
       if (response.statusCode == 201) {
-        // Order saved successfully
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
@@ -312,17 +331,19 @@ class _SalesCustomerEnrollmentPageState extends State<SalesCustomerEnrollmentPag
                 child: Text('OK'),
                 onPressed: () {
                   Navigator.of(context).pop();
-                  // You might want to clear the form or navigate to a different page here
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (context) => SalesCustomerEnrollmentPage()),
+                  );
                 },
               ),
             ],
           ),
         );
       } else {
-        // Error saving order
         throw Exception('Failed to save order');
       }
     } catch (e) {
+      NetworkErrorNotifier.instance.notifyError();
       setState(() {
         _isSubmitting = false;
       });
@@ -375,7 +396,6 @@ class _SalesCustomerEnrollmentPageState extends State<SalesCustomerEnrollmentPag
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
-                  controller: _searchController,
                   decoration: InputDecoration(
                       hintText: 'Masukkan nama paket',
                       suffixIcon: Icon(Icons.search)),
@@ -405,6 +425,108 @@ class _SalesCustomerEnrollmentPageState extends State<SalesCustomerEnrollmentPag
         ),
       ),
     );
+  }
+
+  Future<void> _fetchPurposes() async {
+    print("DEBUG: Starting to fetch purposes");
+    try {
+      final response = await http.get(Uri.parse('${Env.apiUrl}/api/order-purposes'));
+      print("DEBUG: Received response with status code: ${response.statusCode}");
+      print("DEBUG: Response body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        final List<dynamic> purposesJson = json.decode(response.body);
+        print("DEBUG: Parsed ${purposesJson.length} purposes");
+        setState(() {
+          _purposeOptions = purposesJson.map((json) {
+            try {
+              return OrderPurpose.fromJson(json);
+            } catch (e) {
+              print("DEBUG: Error parsing purpose JSON: $e");
+              print("DEBUG: Problematic JSON: $json");
+              return null;
+            }
+          }).whereType<OrderPurpose>().toList();
+        });
+        print("DEBUG: _purposeOptions updated, length: ${_purposeOptions.length}");
+      } else {
+        throw Exception('Failed to load purposes: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching purposes: $e');
+    }
+  }
+
+  Future<void> _onSearchChanged(String query) async {
+    print("DEBUG: _onSearchChanged called with query: '$query'");
+    setState(() {
+      _isTyping = query.isNotEmpty;
+    });
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () async {
+      if (query.isEmpty || !_isFieldFocused) {
+        print("DEBUG: Query is empty or field is not focused, clearing results");
+        setState(() {
+          _searchResults = [];
+          _isLoading = false;
+          _isTyping = false;
+        });
+        return;
+      }
+
+      setState(() {
+        _isLoading = true;
+      });
+
+      try {
+        final url = '${Env.apiUrl}/api/customers/search?query=$query';
+        print("DEBUG: Sending request to $url");
+        final response = await http.get(Uri.parse(url));
+
+        print("DEBUG: Received response with status code: ${response.statusCode}");
+        print("DEBUG: Response headers: ${response.headers}");
+        print("DEBUG: Raw response body: ${response.body}");
+
+        if (response.statusCode == 200) {
+          final List<dynamic> results = json.decode(response.body);
+          setState(() {
+            _searchResults = results.cast<Map<String, dynamic>>();
+            _isLoading = false;
+            _isTyping = false;
+          });
+          print("DEBUG: Updated search results, count: ${_searchResults.length}");
+          print("DEBUG: First result (if any): ${_searchResults.isNotEmpty ? _searchResults.first : 'No results'}");
+        } else {
+          print("DEBUG: Non-200 status code received");
+          throw Exception('Failed to load search results: ${response.statusCode} ${response.reasonPhrase}');
+        }
+      } catch (e, stackTrace) {
+        print("DEBUG: Error in _onSearchChanged: $e");
+        print("DEBUG: Stack trace: $stackTrace");
+        NetworkErrorNotifier.instance.notifyError();
+        setState(() {
+          _isLoading = false;
+          _isTyping = false;
+        });
+      }
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> _debouncedSearch(String pattern) async {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+
+    final completer = Completer<List<Map<String, dynamic>>>();
+
+    _debounce = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        final results = await _searchCustomers(pattern);
+        completer.complete(results);
+      } catch (e) {
+        completer.completeError(e);
+      }
+    });
+
+    return completer.future;
   }
 
   Future<void> _selectDateTime(BuildContext context) async {
@@ -461,6 +583,7 @@ class _SalesCustomerEnrollmentPageState extends State<SalesCustomerEnrollmentPag
     } catch (e, stackTrace) {
       print("Error fetching restaurants: $e");
       print("Stack trace: $stackTrace");
+      NetworkErrorNotifier.instance.notifyError();
       if (retryCount > 0) {
         print("Retrying... (${retryCount - 1} attempts left)");
         await Future.delayed(Duration(seconds: 2));
@@ -476,11 +599,37 @@ class _SalesCustomerEnrollmentPageState extends State<SalesCustomerEnrollmentPag
     }
   }
 
+  Future<List<Map<String, dynamic>>> _searchCustomers(String pattern) async {
+    setState(() {
+      _isTyping = true;
+    });
+
+    try {
+      final url = '${Env.apiUrl}/api/customers/search?query=$pattern';
+      final response = await http.get(Uri.parse(url));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> results = json.decode(response.body);
+        setState(() {
+          _searchResults = results.cast<Map<String, dynamic>>();
+          _isTyping = false;
+        });
+        return _searchResults;
+      } else {
+        throw Exception('Failed to load search results: ${response.statusCode} ${response.reasonPhrase}');
+      }
+    } catch (e) {
+      print("Error in _searchCustomers: $e");
+      NetworkErrorNotifier.instance.notifyError();
+      setState(() {
+        _isTyping = false;
+      });
+      return [];
+    }
+  }
+
   Future<void> _fetchPackagesForRestaurant(String restaurantId) async {
     print("DEBUG: Fetching packages for restaurant $restaurantId");
-    setState(() {
-      _isPackagesLoading = true;
-    });
     try {
       final url = '${Env.apiUrl}/api/restaurants/$restaurantId/packages';
       print("DEBUG: Sending request to $url");
@@ -493,110 +642,159 @@ class _SalesCustomerEnrollmentPageState extends State<SalesCustomerEnrollmentPag
       if (response.statusCode == 200) {
         final List<dynamic> packagesJson = json.decode(response.body);
         print("DEBUG: Received ${packagesJson.length} packages");
+
+        final List<Package> newPackages = packagesJson.map((json) {
+          try {
+            return Package.fromJson(json);
+          } catch (e) {
+            print("DEBUG: Error parsing package: $e");
+            return null;
+          }
+        }).whereType<Package>().toList();
+
         setState(() {
-          _availablePackages = packagesJson.map((json) {
-            try {
-              return Package.fromJson(json);
-            } catch (e) {
-              print("DEBUG: Error parsing package: $e");
-              return null;
-            }
-          }).whereType<Package>().toList();
+          _availablePackages = newPackages;
           _isPackagesLoading = false;
         });
+
         print("DEBUG: _availablePackages updated, length: ${_availablePackages.length}");
 
         if (_availablePackages.isEmpty) {
           print("DEBUG: No packages found for this restaurant");
-          // You can show a message to the user here if needed
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Tidak ada paket tersedia untuk restoran ini.')),
+          );
         }
       } else {
         throw Exception('Failed to load packages: ${response.statusCode}');
       }
     } catch (e) {
       print("DEBUG: Error fetching packages: $e");
+      NetworkErrorNotifier.instance.notifyError();
       setState(() {
         _isPackagesLoading = false;
-        _availablePackages = []; // Ensure the list is empty in case of an error
+        _availablePackages = [];
       });
-      // Show an error message to the user
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Gagal memuat paket. Silakan coba lagi.')),
       );
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return BurgerMenu(
-      topBarTitle: "Pendaftaran Order",
-      activePage: ActivePage.salesCustomerEnrollment,
-      child: LoadingOverlay(
-        isLoading: _isSubmitting,
-        loadingText: "Menyimpan pesanan...",
-        child: GestureDetector(
-          onTap: () => FocusScope.of(context).unfocus(),
-          child: SingleChildScrollView(
-            padding: EdgeInsets.all(16.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildCustomerSearchField(),
-                  _buildCustomerDetails(),
-                  SizedBox(height: 20),
-                  _buildRestaurantDropdown(),
-                  SizedBox(height: 20),
-                  _buildPackageSelection(),
-                  SizedBox(height: 20),
-                  _buildSelectedPackages(),
-                  SizedBox(height: 20),
-                  _buildTotalPrice(),
-                  SizedBox(height: 20),
-                  _buildDeliveryDateTime(),
-                  SizedBox(height: 20),
-                  _buildSubmitButton(),
-                ],
+  Widget _buildCustomerSearchField() {
+    return Stack(
+      children: [
+        TypeAheadFormField<Map<String, dynamic>>(
+          textFieldConfiguration: TextFieldConfiguration(
+            controller: _nameController,
+            decoration: InputDecoration(
+              labelText: 'Nama Pelanggan',
+              hintText: _isCustomerSelected ? '' : 'Ketik untuk mulai mencari',
+              suffixIcon: _isTyping && !_isCustomerSelected
+                  ? Container(
+                width: 20,
+                height: 20,
+                margin: EdgeInsets.all(16),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                ),
+              )
+                  : null,
+              filled: _isCustomerSelected,
+              fillColor: _isCustomerSelected ? Colors.green[50] : null,
+              border: OutlineInputBorder(),
+              enabledBorder: _isCustomerSelected
+                  ? OutlineInputBorder(borderSide: BorderSide(color: Colors.green))
+                  : null,
+            ),
+            enabled: !_isCustomerSelected,
+          ),
+          suggestionsCallback: (pattern) async {
+            if (pattern.isEmpty || _isCustomerSelected) {
+              return [];
+            }
+            return _debouncedSearch(pattern);
+          },
+          itemBuilder: (context, suggestion) {
+            return ListTile(
+              title: Text(suggestion['name']),
+              subtitle: Text('${suggestion['address']} - ${suggestion['phone_number']}'),
+            );
+          },
+          onSuggestionSelected: (suggestion) {
+            _selectCustomer(suggestion);
+          },
+          noItemsFoundBuilder: (context) {
+            return _isTyping && !_isCustomerSelected
+                ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Center(child: CircularProgressIndicator()),
+            )
+                : Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Text('No items found', textAlign: TextAlign.center),
+            );
+          },
+          validator: (value) {
+            if (_selectedCustomer == null) {
+              return 'Mohon pilih pelanggan dari daftar';
+            }
+            return null;
+          },
+        ),
+        if (_isCustomerSelected)
+          Positioned(
+            right: 8,
+            top: 8,
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _isCustomerSelected = false;
+                  _selectedCustomer = null;
+                  _selectedCustomerId = null;
+                  _nameController.clear();
+                  _addressController.clear();
+                  _phoneController.clear();
+                });
+              },
+              child: Container(
+                padding: EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.close,
+                  size: 20,
+                  color: Colors.white,
+                ),
               ),
             ),
           ),
-        ),
-      ),
+      ],
     );
   }
 
-  Widget _buildCustomerSearchField() {
-    return Focus(
-      onFocusChange: (hasFocus) {
+  Widget _buildPurposeDropdown() {
+    print("DEBUG: Building purpose dropdown. Options count: ${_purposeOptions.length}");
+    return _purposeOptions.isEmpty
+        ? Center(child: CircularProgressIndicator())
+        : DropdownButtonFormField<OrderPurpose>(
+      value: _selectedPurpose,
+      items: _purposeOptions.map((purpose) => DropdownMenuItem<OrderPurpose>(
+        value: purpose,
+        child: Text(purpose.name),
+      )).toList(),
+      onChanged: (OrderPurpose? newValue) {
         setState(() {
-          _isFieldFocused = hasFocus;
-          if (!hasFocus) {
-            _searchResults = [];
-            _isTyping = false;
-          }
+          _selectedPurpose = newValue;
         });
       },
-      child: TextFormField(
-        controller: _nameController,
-        decoration: InputDecoration(
-          labelText: 'Nama Pelanggan',
-          hintText: 'Ketik untuk mulai mencari',
-          suffixIcon: _isTyping && _isFieldFocused
-              ? Container(
-            width: 20,
-            height: 20,
-            margin: EdgeInsets.all(16),
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-            ),
-          )
-              : null,
-        ),
-        validator: (value) => value?.isEmpty ?? true
-            ? 'Mohon masukkan nama pelanggan'
-            : null,
+      decoration: InputDecoration(
+        labelText: 'Keperluan/Purpose',
+        border: OutlineInputBorder(),
       ),
+      validator: (value) => value == null ? 'Mohon pilih keperluan' : null,
     );
   }
 
@@ -651,6 +849,10 @@ class _SalesCustomerEnrollmentPageState extends State<SalesCustomerEnrollmentPag
   }
 
   Widget _buildPackageSelection() {
+    print("DEBUG: Building package selection");
+    print("DEBUG: _isPackagesLoading: $_isPackagesLoading");
+    print("DEBUG: _availablePackages length: ${_availablePackages.length}");
+
     return Row(
       children: [
         Expanded(
@@ -664,7 +866,7 @@ class _SalesCustomerEnrollmentPageState extends State<SalesCustomerEnrollmentPag
               });
             },
             isLoading: _isPackagesLoading,
-            showDescription: _showDescription, // Add this line
+            showDescription: _showDescription,
           ),
         ),
         SizedBox(width: 10),
@@ -796,13 +998,10 @@ class _SalesCustomerEnrollmentPageState extends State<SalesCustomerEnrollmentPag
 
   @override
   void dispose() {
-    print("DEBUG: dispose method called");
-    // _packageController.dispose();
-    _searchController.dispose();
+    _debounce?.cancel();
     _nameController.dispose();
     _addressController.dispose();
     _phoneController.dispose();
-    _restaurantController.dispose();
     super.dispose();
   }
 }
@@ -834,7 +1033,7 @@ class Package {
       symbol: 'Rp ',
       decimalDigits: 0,
     );
-    return formatter.format(priceInCents / 100);
+    return formatter.format(priceInCents);
   }
 }
 
@@ -852,6 +1051,7 @@ class OrderConfirmationModal extends StatelessWidget {
   final DateTime deliveryDateTime;
   final int totalPrice;
   final VoidCallback onConfirm;
+  final OrderPurpose purpose;
   final VoidCallback onCancel;
 
   OrderConfirmationModal({
@@ -861,6 +1061,7 @@ class OrderConfirmationModal extends StatelessWidget {
     required this.deliveryDateTime,
     required this.totalPrice,
     required this.onConfirm,
+    required this.purpose,
     required this.onCancel,
   });
 
@@ -880,6 +1081,7 @@ class OrderConfirmationModal extends StatelessWidget {
           children: [
             _buildInfoRow('Pelanggan', customerName),
             _buildInfoRow('Restoran', restaurantName),
+            _buildInfoRow('Keperluan', purpose.name),
             SizedBox(height: 16),
             Text('Paket yang dipesan:', style: TextStyle(fontWeight: FontWeight.bold)),
             SizedBox(height: 8),
@@ -995,7 +1197,7 @@ class OrderConfirmationModal extends StatelessWidget {
       symbol: 'Rp ',
       decimalDigits: 0,
     );
-    return formatter.format(priceInCents / 100);
+    return formatter.format(priceInCents);
   }
 }
 
@@ -1016,13 +1218,15 @@ class PackageDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    print("DEBUG: Building PackageDropdown");
+    print("DEBUG: Available packages: ${availablePackages.length}");
+    print("DEBUG: Is loading: $isLoading");
+
     return Stack(
       children: [
         DropdownButtonFormField<Package>(
           value: selectedPackage,
-          items: availablePackages.isEmpty
-              ? []
-              : availablePackages.map((package) => DropdownMenuItem<Package>(
+          items: availablePackages.map((package) => DropdownMenuItem<Package>(
             value: package,
             child: Row(
               children: [
@@ -1035,14 +1239,14 @@ class PackageDropdown extends StatelessWidget {
                     padding: EdgeInsets.zero,
                   ),
                 ),
-                SizedBox(width: 8), // Add some space between the icon and text
+                SizedBox(width: 8),
                 Expanded(
                   child: Text('${package.name} - ${package.formattedPrice}'),
                 ),
               ],
             ),
           )).toList(),
-          onChanged: (isLoading || availablePackages.isEmpty) ? null : onChanged,
+          onChanged: isLoading ? null : onChanged,
           hint: Text(
               isLoading
                   ? 'Memuat paket...'
@@ -1052,7 +1256,7 @@ class PackageDropdown extends StatelessWidget {
           ),
           isExpanded: true,
           decoration: InputDecoration(
-            enabled: !isLoading && availablePackages.isNotEmpty,
+            enabled: !isLoading,
             border: OutlineInputBorder(),
             contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           ),
@@ -1121,7 +1325,6 @@ class RestaurantDropdown extends StatelessWidget {
           ),
           isExpanded: true,
           decoration: InputDecoration(
-            // Remove the labelText
             enabled: !isLoading && availableRestaurants.isNotEmpty,
             border: OutlineInputBorder(),
             contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -1138,6 +1341,22 @@ class RestaurantDropdown extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class OrderPurpose {
+  final int id;
+  final String name;
+  final String nameEn;
+
+  OrderPurpose({required this.id, required this.name, required this.nameEn});
+
+  factory OrderPurpose.fromJson(Map<String, dynamic> json) {
+    return OrderPurpose(
+      id: json['id'] as int,
+      name: json['name'] as String,
+      nameEn: json['name_en'] as String,
     );
   }
 }

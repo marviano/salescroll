@@ -3,8 +3,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';  // Add this import for TimeoutException
-import 'burger_menu.dart';
-import 'loading_overlay.dart';
+import 'widgets/burger_menu.dart';
+import 'widgets/loading_overlay.dart';
 
 class CustomerRegistrationPage extends StatelessWidget {
   @override
