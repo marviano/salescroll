@@ -276,6 +276,24 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
     }
   }
 
+  void _addSelectedPackage() {
+    if (_selectedPackage != null) {
+      setState(() {
+        _addPackage(_selectedPackage!);
+        // Optionally, reset _selectedPackage to null after adding
+        // _selectedPackage = null;
+      });
+      // Show a snackbar to confirm the package was added
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${_selectedPackage!.name} added to the order'),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   void _processOrder() async {
     setState(() {
       _isSubmitting = true;
@@ -852,7 +870,6 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
     print("DEBUG: Building package selection");
     print("DEBUG: _isPackagesLoading: $_isPackagesLoading");
     print("DEBUG: _availablePackages length: ${_availablePackages.length}");
-
     return Row(
       children: [
         Expanded(
@@ -862,7 +879,6 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
             onChanged: (Package? newValue) {
               setState(() {
                 _selectedPackage = newValue;
-                if (newValue != null) _addPackage(newValue);
               });
             },
             isLoading: _isPackagesLoading,
@@ -870,13 +886,30 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
           ),
         ),
         SizedBox(width: 10),
-        IconButton(
-          icon: Icon(Icons.search),
-          onPressed: _selectedRestaurant != null ? _showSearchDialog : null,
+        ElevatedButton(
+          onPressed: _selectedPackage != null ? _addSelectedPackage : null,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.add, size: 20),
+              SizedBox(width: 4),
+              Text('Add'),
+            ],
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green, // Replaces primary
+            foregroundColor: Colors.white, // Replaces onPrimary
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            elevation: 2,
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
         ),
       ],
     );
   }
+
 
   Widget _buildSelectedPackages() {
     return Column(

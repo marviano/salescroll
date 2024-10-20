@@ -24,6 +24,7 @@ class BurgerMenu extends StatelessWidget {
   final String topBarTitle;
   final ActivePage activePage;
   final VoidCallback? onRefresh;
+  final Color backgroundColor;
 
   const BurgerMenu({
     Key? key,
@@ -31,6 +32,7 @@ class BurgerMenu extends StatelessWidget {
     required this.topBarTitle,
     required this.activePage,
     this.onRefresh,
+    this.backgroundColor = Colors.white,
   }) : super(key: key);
 
   Future<void> _handleLogout(BuildContext context) async {
@@ -62,7 +64,9 @@ class BurgerMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: backgroundColor,
       appBar: AppBar(
+        backgroundColor: backgroundColor,
         leading: Builder(
           builder: (context) => IconButton(
             icon: Icon(Icons.menu),
