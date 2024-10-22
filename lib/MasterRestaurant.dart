@@ -49,6 +49,7 @@ class _MasterRestaurantFormState extends State<MasterRestaurantForm> {
   bool _isLoading = false;
   bool _isSearching = false;
   bool _isEditing = false;
+  bool _isFormVisible = false;
   List<Map<String, dynamic>> _restaurants = [];
   String? _selectedRestaurantId;
   String _selectedStatus = 'active';
@@ -56,14 +57,33 @@ class _MasterRestaurantFormState extends State<MasterRestaurantForm> {
 
   List<Map<String, dynamic>> _roomShapes = [];
 
+  // @override
+  // void initState() {
+  //   super.initState();
+  //   _fetchRoomShapes().then((_) {
+  //     _addMeetingRoom();
+  //     _fetchRestaurants();
+  //   });
+  // }
+
   @override
   void initState() {
     super.initState();
     _fetchRoomShapes().then((_) {
-      _addMeetingRoom();
       _fetchRestaurants();
     });
   }
+
+  // @override
+  // void dispose() {
+  //   _restaurantNameController.dispose();
+  //   _searchController.dispose();
+  //   _debounce?.cancel();
+  //   for (var room in _meetingRooms) {
+  //     room.dispose();
+  //   }
+  //   super.dispose();
+  // }
 
   @override
   void dispose() {
@@ -74,6 +94,25 @@ class _MasterRestaurantFormState extends State<MasterRestaurantForm> {
       room.dispose();
     }
     super.dispose();
+  }
+
+  void _showForm({Map<String, dynamic>? restaurant}) {
+    setState(() {
+      _isFormVisible = true;
+      if (restaurant != null) {
+        _populateFormForEditing(restaurant);
+      } else {
+        _resetForm();
+      }
+    });
+  }
+
+  void _hideForm() {
+    setState(() {
+      _isFormVisible = false;
+      _isEditing = false;
+      _resetForm();
+    });
   }
 
   void _populateFormForEditing(Map<String, dynamic> restaurant) {
@@ -240,8 +279,9 @@ class _MasterRestaurantFormState extends State<MasterRestaurantForm> {
 
         if (response.statusCode == 200) {
           _showDialog('Success', 'Restaurant updated successfully');
-          _resetForm();
-          _fetchRestaurants();
+          _hideForm(); // Close the form
+          _resetForm(); // Reset the form
+          _fetchRestaurants(); // Refresh the restaurant list
         } else {
           final errorMessage = json.decode(response.body)['error'] ?? 'Unknown error occurred';
           throw Exception('Failed to update restaurant: $errorMessage');
@@ -354,29 +394,7 @@ class _MasterRestaurantFormState extends State<MasterRestaurantForm> {
             ),
             IconButton(
               icon: Icon(Icons.edit),
-              onPressed: () {
-                print('DEBUG: Edit button pressed for restaurant: ${restaurant['id']}');
-                print('DEBUG: Full restaurant data: $restaurant');
-                print('DEBUG: Meeting rooms data: ${restaurant['meeting_rooms']}');
-                setState(() {
-                  _isEditing = true;
-                  _selectedRestaurantId = restaurant['id'];
-                  _restaurantNameController.text = restaurant['restaurant_name'];
-                  _meetingRooms = (restaurant['meeting_rooms'] as List<dynamic>?)
-                      ?.map((roomData) {
-                    print('DEBUG: Processing room data: $roomData');
-                    final meetingRoom = MeetingRoomForm(
-                      onRemove: _removeMeetingRoom,
-                      supportedLayouts: _roomShapes,
-                    );
-                    meetingRoom.populate(roomData);
-                    print('DEBUG: Room ${roomData['room_name']} populated with layouts: ${meetingRoom.selectedLayouts}');
-                    return meetingRoom;
-                  }).toList() ?? [];
-                  if (_meetingRooms.isEmpty) _addMeetingRoom();
-                  print('DEBUG: Total meeting rooms after population: ${_meetingRooms.length}');
-                });
-              },
+              onPressed: () => _showForm(restaurant: restaurant),
             ),
             IconButton(
               icon: Icon(Icons.inventory),
@@ -409,125 +427,126 @@ class _MasterRestaurantFormState extends State<MasterRestaurantForm> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Card(
-              color: Color(0xFFFFF8F3), // #fff8f3 background color
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      TextFormField(
-                        decoration: InputDecoration(labelText: 'Restaurant Name'),
-                        controller: _restaurantNameController,
-                        validator: (value) => value?.isEmpty ?? true ? 'Please enter restaurant name' : null,
-                      ),
-                      SizedBox(height: 10),
-                      Divider(thickness: 1, color: Colors.grey[300]),
-                      SizedBox(height: 10),
-                      Text('Meeting Rooms:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      ..._meetingRooms,
-                      Container(
-                        width: MediaQuery.of(context).size.width * 1,
-                        child: ElevatedButton.icon(
-                          icon: Icon(Icons.add_circle, size: 18),
-                          label: Text(
-                            'Room',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          onPressed: _addMeetingRoom,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Color(0xFFFFD700),
-                            foregroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 20),
-                      Divider(thickness: 1, color: Colors.grey[300]),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          if (!_isEditing)
-                            _buildButton(
-                              onPressed: _submitForm,
-                              label: 'Tambah Restoran',
-                              color: Color(0xFFADFF2F),
-                            ),
-                          if (_isEditing) ...[
-                            _buildButton(
-                              onPressed: _updateRestaurant,
-                              label: 'Update',
-                              color: Color(0xFFADFF2F),
-                              icon: Icons.update,
-                            ),
-                            _buildButton(
-                              onPressed: _cancelUpdate,
-                              label: 'Cancel Update',
-                              color: Colors.red,
-                              icon: Icons.cancel,
-                              textColor: Colors.white,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
+            if (!_isFormVisible) ...[
+              Container(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: Icon(Icons.add),
+                  label: Text('Tambah Restoran'),
+                  onPressed: () => _showForm(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Color(0xFFADFF2F),
+                    foregroundColor: Colors.black,
+                    padding: EdgeInsets.symmetric(vertical: 15),
                   ),
                 ),
               ),
-            ),
-            SizedBox(height: 20),
-            Divider(thickness: 1, color: Colors.grey[300]),
-            SizedBox(height: 20),
-            TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                labelText: 'Search Restaurants',
-                suffixIcon: Icon(Icons.search),
+              SizedBox(height: 20),
+              TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  labelText: 'Search Restaurants',
+                  suffixIcon: Icon(Icons.search),
+                ),
+                onChanged: _onSearchChanged,
               ),
-              onChanged: _onSearchChanged,
-            ),
-            SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                FilterChip(
-                  label: Text('All'),
-                  selected: _selectedStatus == 'all',
-                  onSelected: (selected) {
-                    setState(() => _selectedStatus = 'all');
-                    _fetchRestaurants();
-                  },
+              SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  FilterChip(
+                    label: Text('All'),
+                    selected: _selectedStatus == 'all',
+                    onSelected: (selected) {
+                      setState(() => _selectedStatus = 'all');
+                      _fetchRestaurants();
+                    },
+                  ),
+                  FilterChip(
+                    label: Text('Active'),
+                    selected: _selectedStatus == 'active',
+                    onSelected: (selected) {
+                      setState(() => _selectedStatus = 'active');
+                      _fetchRestaurants();
+                    },
+                  ),
+                  FilterChip(
+                    label: Text('Inactive'),
+                    selected: _selectedStatus == 'inactive',
+                    onSelected: (selected) {
+                      setState(() => _selectedStatus = 'inactive');
+                      _fetchRestaurants();
+                    },
+                  ),
+                ],
+              ),
+              SizedBox(height: 20),
+              Text('Restaurants:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              _buildRestaurantList(),
+            ],
+            if (_isFormVisible)
+              Card(
+                color: Color(0xFFFFF8F3),
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                FilterChip(
-                  label: Text('Active'),
-                  selected: _selectedStatus == 'active',
-                  onSelected: (selected) {
-                    setState(() => _selectedStatus = 'active');
-                    _fetchRestaurants();
-                  },
+                child: Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextFormField(
+                          decoration: InputDecoration(labelText: 'Restaurant Name'),
+                          controller: _restaurantNameController,
+                          validator: (value) => value?.isEmpty ?? true ? 'Please enter restaurant name' : null,
+                        ),
+                        SizedBox(height: 10),
+                        Divider(thickness: 1, color: Colors.grey[300]),
+                        SizedBox(height: 10),
+                        Text('Meeting Rooms:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        ..._meetingRooms,
+                        Container(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            icon: Icon(Icons.add_circle, size: 18),
+                            label: Text('Room', style: TextStyle(fontSize: 12)),
+                            onPressed: _addMeetingRoom,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Color(0xFFFFD700),
+                              foregroundColor: Colors.black,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: 20),
+                        Divider(thickness: 1, color: Colors.grey[300]),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _buildButton(
+                              onPressed: _isEditing ? _updateRestaurant : _submitForm,
+                              label: _isEditing ? 'Update' : 'Tambah Restoran',
+                              color: Color(0xFFADFF2F),
+                            ),
+                            _buildButton(
+                              onPressed: _hideForm,
+                              label: 'Cancel',
+                              color: Colors.red,
+                              textColor: Colors.white,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-                FilterChip(
-                  label: Text('Inactive'),
-                  selected: _selectedStatus == 'inactive',
-                  onSelected: (selected) {
-                    setState(() => _selectedStatus = 'inactive');
-                    _fetchRestaurants();
-                  },
-                ),
-              ],
-            ),
-            SizedBox(height: 20),
-            Text('Restaurants:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            _buildRestaurantList(),
+              ),
           ],
         ),
       ),

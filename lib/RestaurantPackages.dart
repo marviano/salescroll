@@ -101,12 +101,17 @@ class _RestaurantPackagesState extends State<RestaurantPackages> {
   Future<void> _submitForm() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
+      print('DEBUG: Sending package data:');
+      print('id_restaurant: ${widget.restaurantId}');
+      print('package_name: ${_nameController.text}');
+      print('description: ${_descriptionController.text}');
+      print('price: ${_priceController.text}');
       try {
         final response = await http.post(
           Uri.parse('${Env.apiUrl}/api/packages'),
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
-            'id_master_restaurant': widget.restaurantId,
+            'id_restaurant': widget.restaurantId,
             'package_name': _nameController.text,
             'description': _descriptionController.text,
             'price': double.parse(_priceController.text),

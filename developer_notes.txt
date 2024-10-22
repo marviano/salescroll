@@ -1,3 +1,2 @@
-The selection of the room shapes are hardcoded
-The table room_shape on database has no use and not relatable with database interaction at all, its just storing room shape id and name only
-
+Brandkit Color Guide
+Button submit/kirim: 0xFF8BC34A

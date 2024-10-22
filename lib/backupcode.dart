@@ -1,673 +1,1679 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:async';
 import 'widgets/burger_menu.dart';
-import 'widgets/loading_overlay.dart';
 import 'package:salescroll/services/env.dart';
-import 'services/alternating_color_listview.dart';
-import 'RestaurantPackages.dart';
+import 'dart:async';
+import 'widgets/loading_overlay.dart';
 import 'widgets/network_error_handler.dart';
+import 'package:flutter_typeahead/flutter_typeahead.dart';
 
-class MasterRestaurantPage extends StatefulWidget {
+class SalesCustomerEnrollmentPage extends StatefulWidget {
   @override
-  _MasterRestaurantPageState createState() => _MasterRestaurantPageState();
+  _SalesCustomerEnrollmentPageState createState() => _SalesCustomerEnrollmentPageState();
 }
 
-class _MasterRestaurantPageState extends State<MasterRestaurantPage> {
-  final GlobalKey<_MasterRestaurantFormState> _formKey = GlobalKey<_MasterRestaurantFormState>();
+class _SalesCustomerEnrollmentPageState extends State<SalesCustomerEnrollmentPage> {
+  final GlobalKey<_SalesCustomerEnrollmentFormState> _formKey = GlobalKey<_SalesCustomerEnrollmentFormState>();
+
+  void _refreshPage() {
+    _formKey.currentState?.resetForm();
+    // Add any additional refresh logic here
+  }
 
   @override
   Widget build(BuildContext context) {
     return NetworkErrorHandler(
       child: BurgerMenu(
-        topBarTitle: "Master Restaurant",
-        activePage: ActivePage.masterRestaurant,
+        topBarTitle: "Pendaftaran Order",
+        activePage: ActivePage.salesCustomerEnrollment,
         onRefresh: _refreshPage,
-        child: MasterRestaurantForm(key: _formKey),
-        backgroundColor: Colors.white,
+        child: SalesCustomerEnrollmentForm(key: _formKey),
       ),
     );
   }
-
-  void _refreshPage() {
-    _formKey.currentState?.refreshPage();
-  }
 }
 
-class MasterRestaurantForm extends StatefulWidget {
-  MasterRestaurantForm({Key? key}) : super(key: key);
+class SalesCustomerEnrollmentForm extends StatefulWidget {
+  SalesCustomerEnrollmentForm({Key? key}) : super(key: key);
+
   @override
-  _MasterRestaurantFormState createState() => _MasterRestaurantFormState();
+  _SalesCustomerEnrollmentFormState createState() => _SalesCustomerEnrollmentFormState();
 }
 
-class _MasterRestaurantFormState extends State<MasterRestaurantForm> {
+class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentForm> {
   final _formKey = GlobalKey<FormState>();
-  final _restaurantNameController = TextEditingController();
   final _searchController = TextEditingController();
-  List<MeetingRoomForm> _meetingRooms = [];
-  bool _isLoading = false;
-  bool _isSearching = false;
-  bool _isEditing = false;
-  List<Map<String, dynamic>> _restaurants = [];
-  String? _selectedRestaurantId;
-  String _selectedStatus = 'active';
-  Timer? _debounce;
+  final _nameController = TextEditingController();
+  final _addressController = TextEditingController();
+  final _phoneController = TextEditingController();
+  dynamic _selectedRoom;
 
-  List<Map<String, dynamic>> _roomShapes = [];
+  String? _selectedCustomerId;
+  String? _selectedRestaurantId;
+  String _formatPrice(int priceInCents) {
+    final formatter = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp ',
+      decimalDigits: 0,
+    );
+    return formatter.format(priceInCents);
+  }
+
+  List<Restaurant> _availableRestaurants = [];
+  List<Package> _availablePackages = [];
+  List<SelectedPackage> _selectedPackages = [];
+  List<Map<String, dynamic>> _searchResults = [];
+  List<OrderPurpose> _purposeOptions = [];
+
+  Map<String, dynamic>? _selectedCustomer;
+
+  bool _isPackagesLoading = false;
+  bool _isLoading = false;
+  bool _isSubmitting = false;
+  bool _isTyping = false;
+  bool _isFieldFocused = false;
+  bool _isRestaurantsLoading = true;
+  bool _isCustomerSelected = false;
+
+  Restaurant? _selectedRestaurant;
+  Package? _selectedPackage;
+  DateTime? _deliveryDateTime;
+  Timer? _debounce;
+  OrderPurpose? _selectedPurpose;
+  RoomShape? _selectedLayout;
+
+  int _numberOfPeople = 0;
+
+  int _calculateTotalPrice() {
+    return _selectedPackages.fold(0, (total, selectedPackage) =>
+    total + (selectedPackage.package.priceInCents * selectedPackage.quantity));
+  }
 
   @override
   void initState() {
     super.initState();
-    _fetchRoomShapes().then((_) {
-      _addMeetingRoom();
-      _fetchRestaurants();
+    _setupListeners();
+    _fetchRestaurants();
+    _fetchPurposes();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LoadingOverlay(
+      isLoading: _isSubmitting,
+      loadingText: "Menyimpan pesanan...",
+      child: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(16.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildCustomerSearchField(),
+                _buildCustomerDetails(),
+                SizedBox(height: 20),
+                _buildPurposeDropdown(),
+                SizedBox(height: 20),
+                _buildRestaurantDropdown(),
+                SizedBox(height: 20),
+                _buildPackageSelection(),
+                SizedBox(height: 20),
+                _buildSelectedPackages(),
+                SizedBox(height: 20),
+                _buildTotalPrice(),
+                SizedBox(height: 20),
+                _buildSubmitButton(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void resetForm() {
+    setState(() {
+      _selectedCustomerId = null;
+      _selectedRestaurantId = null;
+      _selectedPackages.clear();
+      _searchResults.clear();
+      _deliveryDateTime = null;
+      _nameController.clear();
+      _addressController.clear();
+      _phoneController.clear();
+      _searchController.clear();
+      _selectedRestaurant = null;
+      _selectedPackage = null;
+      _selectedPurpose = null;
+      _isPackagesLoading = false;
+      _isLoading = false;
+      _isSubmitting = false;
+      _isTyping = false;
+      _isFieldFocused = false;
+      _isRestaurantsLoading = true;
+      _isCustomerSelected = false;
+      _selectedCustomer = null;
+      _availablePackages.clear();
     });
+    _formKey.currentState?.reset();
+    _fetchRestaurants();
+    _fetchPurposes();
+  }
+
+  void _setupListeners() {
+    _nameController.addListener(() {
+      print("DEBUG: Name listener triggered with text: ${_nameController.text}");
+      _onSearchChanged(_nameController.text);
+    });
+  }
+
+  void _showDescription(BuildContext context, String description) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Description'),
+          content: SingleChildScrollView(
+            child: Text(description),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: Text('Close'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _selectCustomer(Map<String, dynamic> customer) {
+    setState(() {
+      _selectedCustomer = customer;
+      _selectedCustomerId = customer['id'];
+      _nameController.text = customer['name'];
+      _addressController.text = customer['address'];
+      _phoneController.text = customer['phone_number'];
+      _searchResults = [];
+      _isTyping = false;
+      _isCustomerSelected = true;
+    });
+    FocusScope.of(context).unfocus();
+  }
+
+  void _selectRestaurant(Restaurant? restaurant) {
+    print("DEBUG: Restaurant selected: ${restaurant?.name}");
+    setState(() {
+      _selectedRestaurant = restaurant;
+      _selectedRestaurantId = restaurant?.id;
+      _selectedPackage = null;
+      _selectedPackages.clear();
+      _availablePackages = [];
+      _isPackagesLoading = true;
+    });
+    if (restaurant != null) {
+      print("DEBUG: Calling _fetchPackagesForRestaurant with ID: ${restaurant.id}");
+      _fetchPackagesForRestaurant(restaurant.id);
+    } else {
+      print("DEBUG: No restaurant selected, clearing packages");
+      setState(() {
+        _isPackagesLoading = false;
+      });
+    }
+  }
+
+  void _submitForm() async {
+    print("DEBUG: _submitForm called");
+    if (_formKey.currentState!.validate()) {
+      _formKey.currentState!.save();
+
+      if (_selectedLayout == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Mohon pilih layout ruangan')),
+        );
+        return;
+      }
+
+      if (_numberOfPeople <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Mohon masukkan jumlah orang')),
+        );
+        return;
+      }
+
+      if (_selectedCustomer == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Mohon pilih pelanggan dari daftar')),
+        );
+        return;
+      }
+
+      if (_selectedPurpose == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Mohon pilih keperluan')),
+        );
+        return;
+      }
+
+      if (_deliveryDateTime == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Mohon pilih tanggal dan waktu pengiriman')),
+        );
+        return;
+      }
+
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return OrderConfirmationModal(
+            customerName: _nameController.text,
+            restaurantName: _selectedRestaurant?.name ?? '',
+            selectedPackages: _selectedPackages,
+            deliveryDateTime: _deliveryDateTime!,
+            totalPrice: _calculateTotalPrice(),
+            purpose: _selectedPurpose!,
+            onConfirm: () {
+              Navigator.of(context).pop();
+              _processOrder();
+            },
+            onCancel: () {
+              Navigator.of(context).pop();
+            },
+          );
+        },
+      );
+    }
+  }
+
+  void _addSelectedPackage() {
+    if (_selectedPackage != null) {
+      setState(() {
+        _addPackage(_selectedPackage!);
+        // Optionally, reset _selectedPackage to null after adding
+        // _selectedPackage = null;
+      });
+      // Show a snackbar to confirm the package was added
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${_selectedPackage!.name} added to the order'),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  void _processOrder() async {
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    // Get the current user's UID
+    final User? user = FirebaseAuth.instance.currentUser;
+    final String? firebaseUid = user?.uid;
+
+    if (firebaseUid == null) {
+      // Handle the case where the user is not logged in
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('User not logged in. Please log in and try again.')),
+      );
+      setState(() {
+        _isSubmitting = false;
+      });
+      return;
+    }
+
+    final orderData = {
+      'id_customer': _selectedCustomerId,
+      'id_restaurant': _selectedRestaurantId,
+      'id_room_shape': _selectedLayout!.id,
+      'number_of_people': _numberOfPeople,
+      'id_order_purpose': _selectedPurpose!.id.toString(),
+      'delivery_datetime': _deliveryDateTime!.toIso8601String(),
+      'order_items': _selectedPackages.map((sp) => {
+        'id_package': sp.package.id,
+        'quantity': sp.quantity,
+        'price': sp.package.priceInCents,
+      }).toList(),
+      'firebase_uid': firebaseUid,
+    };
+
+    try {
+      final response = await http.post(
+        Uri.parse('${Env.apiUrl}/api/orders'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(orderData),
+      );
+
+      setState(() {
+        _isSubmitting = false;
+      });
+
+      if (response.statusCode == 201) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('Order Submitted'),
+            content: Text('Your order has been saved successfully.'),
+            actions: [
+              TextButton(
+                child: Text('OK'),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (context) => SalesCustomerEnrollmentPage()),
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      } else {
+        throw Exception('Failed to save order');
+      }
+    } catch (e) {
+      NetworkErrorNotifier.instance.notifyError();
+      setState(() {
+        _isSubmitting = false;
+      });
+      print('Error saving order: $e');
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Error'),
+          content: Text('There was an error submitting your order. Please try again.'),
+          actions: [
+            TextButton(
+              child: Text('OK'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  void _addPackage(Package package) {
+    print("DEBUG: _addPackage called with package: ${package.name}");
+    setState(() {
+      var existingPackage = _selectedPackages.firstWhere(
+              (element) => element.package.id == package.id,
+          orElse: () => SelectedPackage(package: package, quantity: 0));
+      if (existingPackage.quantity == 0) _selectedPackages.add(existingPackage);
+      existingPackage.quantity++;
+    });
+  }
+
+  void _removePackage(SelectedPackage selectedPackage) {
+    print("DEBUG: _removePackage called with package: ${selectedPackage.package.name}");
+    setState(() {
+      if (selectedPackage.quantity > 1)
+        selectedPackage.quantity--;
+      else
+        _selectedPackages.remove(selectedPackage);
+    });
+  }
+
+  void _showSearchDialog() {
+    print("DEBUG: _showSearchDialog called");
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('Cari Paket'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                  decoration: InputDecoration(
+                      hintText: 'Masukkan nama paket',
+                      suffixIcon: Icon(Icons.search)),
+                  onChanged: (value) => setState(() {})),
+              SizedBox(height: 10),
+              Container(
+                height: 200,
+                width: double.maxFinite,
+                child: ListView(
+                  children: _availablePackages
+                      .where((package) => package.name
+                      .toLowerCase()
+                      .contains(_searchController.text.toLowerCase()))
+                      .map((package) => ListTile(
+                      title: Text(package.name),
+                      subtitle: Text(package.formattedPrice),
+                      onTap: () {
+                        _addPackage(package);
+                        Navigator.pop(context);
+                      }
+                  ))
+                      .toList(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _fetchPurposes() async {
+    print("DEBUG: Starting to fetch purposes");
+    try {
+      final response = await http.get(Uri.parse('${Env.apiUrl}/api/order-purposes'));
+      print("DEBUG: Received response with status code: ${response.statusCode}");
+      print("DEBUG: Response body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        final List<dynamic> purposesJson = json.decode(response.body);
+        print("DEBUG: Parsed ${purposesJson.length} purposes");
+        setState(() {
+          _purposeOptions = purposesJson.map((json) {
+            try {
+              return OrderPurpose.fromJson(json);
+            } catch (e) {
+              print("DEBUG: Error parsing purpose JSON: $e");
+              print("DEBUG: Problematic JSON: $json");
+              return null;
+            }
+          }).whereType<OrderPurpose>().toList();
+        });
+        print("DEBUG: _purposeOptions updated, length: ${_purposeOptions.length}");
+      } else {
+        throw Exception('Failed to load purposes: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching purposes: $e');
+    }
+  }
+
+  Future<void> _onSearchChanged(String query) async {
+    print("DEBUG: _onSearchChanged called with query: '$query'");
+    setState(() {
+      _isTyping = query.isNotEmpty;
+    });
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () async {
+      if (query.isEmpty || !_isFieldFocused) {
+        print("DEBUG: Query is empty or field is not focused, clearing results");
+        setState(() {
+          _searchResults = [];
+          _isLoading = false;
+          _isTyping = false;
+        });
+        return;
+      }
+
+      setState(() {
+        _isLoading = true;
+      });
+
+      try {
+        final url = '${Env.apiUrl}/api/customers/search?query=$query';
+        print("DEBUG: Sending request to $url");
+        final response = await http.get(Uri.parse(url));
+
+        print("DEBUG: Received response with status code: ${response.statusCode}");
+        print("DEBUG: Response headers: ${response.headers}");
+        print("DEBUG: Raw response body: ${response.body}");
+
+        if (response.statusCode == 200) {
+          final List<dynamic> results = json.decode(response.body);
+          setState(() {
+            _searchResults = results.cast<Map<String, dynamic>>();
+            _isLoading = false;
+            _isTyping = false;
+          });
+          print("DEBUG: Updated search results, count: ${_searchResults.length}");
+          print("DEBUG: First result (if any): ${_searchResults.isNotEmpty ? _searchResults.first : 'No results'}");
+        } else {
+          print("DEBUG: Non-200 status code received");
+          throw Exception('Failed to load search results: ${response.statusCode} ${response.reasonPhrase}');
+        }
+      } catch (e, stackTrace) {
+        print("DEBUG: Error in _onSearchChanged: $e");
+        print("DEBUG: Stack trace: $stackTrace");
+        NetworkErrorNotifier.instance.notifyError();
+        setState(() {
+          _isLoading = false;
+          _isTyping = false;
+        });
+      }
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> _debouncedSearch(String pattern) async {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+
+    final completer = Completer<List<Map<String, dynamic>>>();
+
+    _debounce = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        final results = await _searchCustomers(pattern);
+        completer.complete(results);
+      } catch (e) {
+        completer.completeError(e);
+      }
+    });
+
+    return completer.future;
+  }
+
+  Future<void> _selectDateTime(BuildContext context) async {
+    print("DEBUG: _selectDateTime called");
+    final DateTime? pickedDate = await showDatePicker(
+        context: context,
+        initialDate: _deliveryDateTime ?? DateTime.now(),
+        firstDate: DateTime.now(),
+        lastDate: DateTime(2101));
+    if (pickedDate != null) {
+      final TimeOfDay? pickedTime = await showTimePicker(
+          context: context,
+          initialTime:
+          TimeOfDay.fromDateTime(_deliveryDateTime ?? DateTime.now()));
+      if (pickedTime != null) {
+        setState(() {
+          _deliveryDateTime = DateTime(pickedDate.year, pickedDate.month,
+              pickedDate.day, pickedTime.hour, pickedTime.minute);
+        });
+        print("DEBUG: Selected date and time: $_deliveryDateTime");
+      }
+    }
+  }
+
+  Future<void> _fetchRestaurants({int retryCount = 3}) async {
+    print("DEBUG: Starting to fetch restaurants (attempt ${4 - retryCount})");
+    try {
+      final url = '${Env.apiUrl}/api/restaurants';
+      print("DEBUG: Sending request to $url");
+      final response = await http.get(Uri.parse(url));
+
+      print("DEBUG: Received response with status code: ${response.statusCode}");
+      print("DEBUG: Response headers: ${response.headers}");
+      print("DEBUG: Raw response body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        final List<dynamic> restaurantsJson = json.decode(response.body);
+        print("DEBUG: Parsed ${restaurantsJson.length} restaurants");
+        setState(() {
+          _availableRestaurants = restaurantsJson.map((json) {
+            try {
+              return Restaurant.fromJson(json);
+            } catch (e) {
+              print("DEBUG: Error parsing restaurant: $e");
+              return null;
+            }
+          }).whereType<Restaurant>().toList();
+          _isRestaurantsLoading = false;
+        });
+        print("DEBUG: Updated _availableRestaurants, length: ${_availableRestaurants.length}");
+      } else {
+        throw Exception('Failed to load restaurants: ${response.statusCode} ${response.reasonPhrase}');
+      }
+    } catch (e, stackTrace) {
+      print("Error fetching restaurants: $e");
+      print("Stack trace: $stackTrace");
+      NetworkErrorNotifier.instance.notifyError();
+      if (retryCount > 0) {
+        print("Retrying... (${retryCount - 1} attempts left)");
+        await Future.delayed(Duration(seconds: 2));
+        return _fetchRestaurants(retryCount: retryCount - 1);
+      } else {
+        setState(() {
+          _isRestaurantsLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load restaurants. Please try again.')),
+        );
+      }
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _searchCustomers(String pattern) async {
+    setState(() {
+      _isTyping = true;
+    });
+
+    try {
+      final url = '${Env.apiUrl}/api/customers/search?query=$pattern';
+      final response = await http.get(Uri.parse(url));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> results = json.decode(response.body);
+        setState(() {
+          _searchResults = results.cast<Map<String, dynamic>>();
+          _isTyping = false;
+        });
+        return _searchResults;
+      } else {
+        throw Exception('Failed to load search results: ${response.statusCode} ${response.reasonPhrase}');
+      }
+    } catch (e) {
+      print("Error in _searchCustomers: $e");
+      NetworkErrorNotifier.instance.notifyError();
+      setState(() {
+        _isTyping = false;
+      });
+      return [];
+    }
+  }
+
+  Future<void> _fetchPackagesForRestaurant(String restaurantId) async {
+    print("DEBUG: Fetching packages for restaurant $restaurantId");
+    try {
+      final url = '${Env.apiUrl}/api/restaurants/$restaurantId/packages';
+      print("DEBUG: Sending request to $url");
+      final response = await http.get(Uri.parse(url));
+
+      print("DEBUG: Received response with status code: ${response.statusCode}");
+      print("DEBUG: Response headers: ${response.headers}");
+      print("DEBUG: Raw response body: ${response.body}");
+
+      if (response.statusCode == 200) {
+        final List<dynamic> packagesJson = json.decode(response.body);
+        print("DEBUG: Received ${packagesJson.length} packages");
+
+        final List<Package> newPackages = packagesJson.map((json) {
+          try {
+            return Package.fromJson(json);
+          } catch (e) {
+            print("DEBUG: Error parsing package: $e");
+            return null;
+          }
+        }).whereType<Package>().toList();
+
+        setState(() {
+          _availablePackages = newPackages;
+          _isPackagesLoading = false;
+        });
+
+        print("DEBUG: _availablePackages updated, length: ${_availablePackages.length}");
+
+        if (_availablePackages.isEmpty) {
+          print("DEBUG: No packages found for this restaurant");
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Tidak ada paket tersedia untuk restoran ini.')),
+          );
+        }
+      } else {
+        throw Exception('Failed to load packages: ${response.statusCode}');
+      }
+    } catch (e) {
+      print("DEBUG: Error fetching packages: $e");
+      NetworkErrorNotifier.instance.notifyError();
+      setState(() {
+        _isPackagesLoading = false;
+        _availablePackages = [];
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal memuat paket. Silakan coba lagi.')),
+      );
+    }
+  }
+
+  Widget _buildCustomerSearchField() {
+    return Stack(
+      children: [
+        TypeAheadFormField<Map<String, dynamic>>(
+          textFieldConfiguration: TextFieldConfiguration(
+            controller: _nameController,
+            decoration: InputDecoration(
+              labelText: 'Nama Pelanggan',
+              hintText: _isCustomerSelected ? '' : 'Ketik untuk mulai mencari',
+              suffixIcon: _isTyping && !_isCustomerSelected
+                  ? Container(
+                width: 20,
+                height: 20,
+                margin: EdgeInsets.all(16),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                ),
+              )
+                  : null,
+              filled: _isCustomerSelected,
+              fillColor: _isCustomerSelected ? Colors.green[50] : null,
+              border: OutlineInputBorder(),
+              enabledBorder: _isCustomerSelected
+                  ? OutlineInputBorder(borderSide: BorderSide(color: Colors.green))
+                  : null,
+            ),
+            enabled: !_isCustomerSelected,
+          ),
+          suggestionsCallback: (pattern) async {
+            if (pattern.isEmpty || _isCustomerSelected) {
+              return [];
+            }
+            return _debouncedSearch(pattern);
+          },
+          itemBuilder: (context, suggestion) {
+            return ListTile(
+              title: Text(suggestion['name']),
+              subtitle: Text('${suggestion['address']} - ${suggestion['phone_number']}'),
+            );
+          },
+          onSuggestionSelected: (suggestion) {
+            _selectCustomer(suggestion);
+          },
+          noItemsFoundBuilder: (context) {
+            return _isTyping && !_isCustomerSelected
+                ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Center(child: CircularProgressIndicator()),
+            )
+                : Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Text('No items found', textAlign: TextAlign.center),
+            );
+          },
+          validator: (value) {
+            if (_selectedCustomer == null) {
+              return 'Mohon pilih pelanggan dari daftar';
+            }
+            return null;
+          },
+        ),
+        if (_isCustomerSelected)
+          Positioned(
+            right: 8,
+            top: 8,
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _isCustomerSelected = false;
+                  _selectedCustomer = null;
+                  _selectedCustomerId = null;
+                  _nameController.clear();
+                  _addressController.clear();
+                  _phoneController.clear();
+                });
+              },
+              child: Container(
+                padding: EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.close,
+                  size: 20,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPurposeDropdown() {
+    print("DEBUG: Building purpose dropdown. Options count: ${_purposeOptions.length}");
+    return _purposeOptions.isEmpty
+        ? Center(child: CircularProgressIndicator())
+        : DropdownButtonFormField<OrderPurpose>(
+      value: _selectedPurpose,
+      items: _purposeOptions.map((purpose) => DropdownMenuItem<OrderPurpose>(
+        value: purpose,
+        child: Text(purpose.name),
+      )).toList(),
+      onChanged: (OrderPurpose? newValue) {
+        setState(() {
+          _selectedPurpose = newValue;
+        });
+      },
+      decoration: InputDecoration(
+        labelText: 'Keperluan/Purpose',
+        border: OutlineInputBorder(),
+      ),
+      validator: (value) => value == null ? 'Mohon pilih keperluan' : null,
+    );
+  }
+
+  Widget _buildCustomerDetails() {
+    return Column(
+      children: [
+        if (_isLoading && _isFieldFocused)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+        if (_searchResults.isNotEmpty && _isFieldFocused)
+          Container(
+            height: 200,
+            child: ListView.builder(
+              itemCount: _searchResults.length,
+              itemBuilder: (context, index) {
+                final customer = _searchResults[index];
+                return ListTile(
+                  title: Text(customer['name']),
+                  subtitle: Text('${customer['address']} - ${customer['phone_number']}'),
+                  onTap: () => _selectCustomer(customer),
+                );
+              },
+            ),
+          ),
+        TextFormField(
+          controller: _addressController,
+          decoration: InputDecoration(labelText: 'Alamat'),
+          validator: (value) =>
+          value?.isEmpty ?? true ? 'Mohon masukkan alamat' : null,
+        ),
+        TextFormField(
+          controller: _phoneController,
+          decoration: InputDecoration(labelText: 'Nomor Telepon'),
+          keyboardType: TextInputType.phone,
+          validator: (value) => value?.isEmpty ?? true
+              ? 'Mohon masukkan nomor telepon'
+              : null,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRestaurantDropdown() {
+    return RestaurantDropdown(
+      availableRestaurants: _availableRestaurants,
+      selectedRestaurant: _selectedRestaurant,
+      onChanged: (Restaurant? restaurant) {
+        _selectRestaurant(restaurant);
+        setState(() {
+          _selectedLayout = null;
+          _numberOfPeople = 0;
+          _selectedRoom = null; // Reset selected room when restaurant changes
+        });
+      },
+      isLoading: _isRestaurantsLoading,
+      onDateTimeChanged: (DateTime? dateTime) {
+        setState(() {
+          _deliveryDateTime = dateTime;
+          _selectedRoom = null; // Reset selected room when date changes
+        });
+      },
+      onRoomSelected: (dynamic room) {
+        setState(() {
+          _selectedRoom = room;
+          // You may want to update other fields based on the selected room
+          // For example:
+          // _selectedLayout = RoomShape.fromJson(room['default_layout']);
+          // _numberOfPeople = room['capacity'];
+        });
+      },
+    );
+  }
+
+  Widget _buildPackageSelection() {
+    print("DEBUG: Building package selection");
+    print("DEBUG: _isPackagesLoading: $_isPackagesLoading");
+    print("DEBUG: _availablePackages length: ${_availablePackages.length}");
+    return Row(
+      children: [
+        Expanded(
+          child: PackageDropdown(
+            availablePackages: _availablePackages,
+            selectedPackage: _selectedPackage,
+            onChanged: (Package? newValue) {
+              setState(() {
+                _selectedPackage = newValue;
+              });
+            },
+            isLoading: _isPackagesLoading,
+            showDescription: _showDescription,
+          ),
+        ),
+        SizedBox(width: 10),
+        ElevatedButton(
+          onPressed: _selectedPackage != null ? _addSelectedPackage : null,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.add, size: 20),
+              SizedBox(width: 4),
+              Text('Add'),
+            ],
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green, // Replaces primary
+            foregroundColor: Colors.white, // Replaces onPrimary
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            elevation: 2,
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+        ),
+      ],
+    );
+  }
+
+
+  Widget _buildSelectedPackages() {
+    return Column(
+      children: _selectedPackages.asMap().entries.map((entry) {
+        final index = entry.key;
+        final selectedPackage = entry.value;
+        final isEven = index % 2 == 0;
+        return Container(
+          color: isEven ? Colors.grey[200] : Colors.white,
+          padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      selectedPackage.package.name,
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.info_outline, size: 20),
+                    onPressed: () => _showDescription(context, selectedPackage.package.description),
+                    padding: EdgeInsets.zero,
+                    constraints: BoxConstraints(),
+                  ),
+                ],
+              ),
+              SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${_formatPrice(selectedPackage.package.priceInCents)}',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  Row(
+                    children: [
+                      Text('Jumlah: ${selectedPackage.quantity}'),
+                      IconButton(
+                        icon: Icon(Icons.remove, size: 20),
+                        onPressed: () => _removePackage(selectedPackage),
+                        padding: EdgeInsets.zero,
+                        constraints: BoxConstraints(),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.add, size: 20),
+                        onPressed: () => _addPackage(selectedPackage.package),
+                        padding: EdgeInsets.zero,
+                        constraints: BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildTotalPrice() {
+    return Text(
+      'Total Harga: ${_formatPrice(_calculateTotalPrice())}',
+      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+    );
+  }
+
+  Widget _buildDeliveryDateTime() {
+    return FormField<DateTime>(
+      validator: (value) {
+        if (_deliveryDateTime == null) {
+          return 'Mohon pilih tanggal dan waktu pengiriman';
+        }
+        return null;
+      },
+      builder: (FormFieldState<DateTime> state) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InkWell(
+              onTap: () => _selectDateTime(context),
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  labelText: 'Tanggal dan Waktu Pengiriman',
+                  hintText: 'Pilih tanggal dan waktu',
+                  errorText: state.errorText,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(_deliveryDateTime != null
+                        ? DateFormat('dd/MM/yyyy HH:mm').format(_deliveryDateTime!)
+                        : 'Pilih tanggal dan waktu'),
+                    Icon(Icons.calendar_today),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return Center(
+      child: SizedBox(
+        width: MediaQuery.of(context).size.width * 0.5,
+        child: ElevatedButton(
+          onPressed: _submitForm,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.lightGreen, // Light green background
+            foregroundColor: Colors.black, // Black text
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(5),
+            ),
+          ),
+          child: Text('Kirim'),
+        ),
+      ),
+    );
   }
 
   @override
   void dispose() {
-    _restaurantNameController.dispose();
-    _searchController.dispose();
     _debounce?.cancel();
-    for (var room in _meetingRooms) {
-      room.dispose();
-    }
+    _nameController.dispose();
+    _addressController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
+}
+class Package {
+  final String id;
+  final String name;
+  final String description;
+  final int priceInCents;
 
-  void _populateFormForEditing(Map<String, dynamic> restaurant) {
-    setState(() {
-      _isEditing = true;
-      _selectedRestaurantId = restaurant['id'];
-      _restaurantNameController.text = restaurant['restaurant_name'];
-      _meetingRooms = (restaurant['meeting_rooms'] as List<dynamic>?)
-          ?.map((roomData) {
-        final meetingRoom = MeetingRoomForm(
-          onRemove: _removeMeetingRoom,
-          supportedLayouts: _roomShapes,
-        );
-        meetingRoom.populate(roomData);
-        print('DEBUG: Room ${roomData['room_name']} populated with layouts: ${meetingRoom.selectedLayouts}');
-        return meetingRoom;
-      }).toList() ?? [];
-      if (_meetingRooms.isEmpty) _addMeetingRoom();
-    });
+  Package({
+    required this.id,
+    required this.name,
+    required this.priceInCents,
+    required this.description
+  });
+
+  factory Package.fromJson(Map<String, dynamic> json) {
+    return Package(
+      id: json['id'],
+      name: json['package_name'],
+      description: json['description'],
+      priceInCents: json['price'],
+    );
   }
 
-  void _addMeetingRoom() {
-    setState(() {
-      _meetingRooms.add(MeetingRoomForm(
-        onRemove: _removeMeetingRoom,
-        supportedLayouts: _roomShapes,
-      ));
-    });
+  String get formattedPrice {
+    final formatter = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp ',
+      decimalDigits: 0,
+    );
+    return formatter.format(priceInCents);
+  }
+}
+
+class SelectedPackage {
+  final Package package;
+  int quantity;
+
+  SelectedPackage({required this.package, this.quantity = 1});
+}
+
+class OrderConfirmationModal extends StatelessWidget {
+  final String customerName;
+  final String restaurantName;
+  final List<SelectedPackage> selectedPackages;
+  final DateTime deliveryDateTime;
+  final int totalPrice;
+  final VoidCallback onConfirm;
+  final OrderPurpose purpose;
+  final VoidCallback onCancel;
+
+  OrderConfirmationModal({
+    required this.customerName,
+    required this.restaurantName,
+    required this.selectedPackages,
+    required this.deliveryDateTime,
+    required this.totalPrice,
+    required this.onConfirm,
+    required this.purpose,
+    required this.onCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final TextStyle defaultTextStyle = Theme.of(context).textTheme.labelLarge ?? TextStyle();
+    final TextStyle smallerTextStyle = defaultTextStyle.copyWith(
+      fontSize: (defaultTextStyle.fontSize ?? 14) - 2,
+    );
+
+    return AlertDialog(
+      title: Text('Konfirmasi Pesanan', style: TextStyle(fontWeight: FontWeight.bold)),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildInfoRow('Pelanggan', customerName),
+            _buildInfoRow('Restoran', restaurantName),
+            _buildInfoRow('Keperluan', purpose.name),
+            SizedBox(height: 16),
+            Text('Paket yang dipesan:', style: TextStyle(fontWeight: FontWeight.bold)),
+            SizedBox(height: 8),
+            ...selectedPackages.map((sp) => _buildPackageRow(sp)),
+            SizedBox(height: 16),
+            _buildDeliveryDateTime(),
+            SizedBox(height: 16),
+            _buildTotalPrice(),
+          ],
+        ),
+      ),
+      actions: [
+        Row(
+          children: [
+            Expanded(
+              child: TextButton(
+                onPressed: onCancel,
+                child: Text('Batal', style: smallerTextStyle.copyWith(color: Colors.white)),
+                style: TextButton.styleFrom(
+                  backgroundColor: Colors.grey[600],
+                  minimumSize: Size(double.infinity, 36),
+                ),
+              ),
+            ),
+            SizedBox(width: 8),
+            Expanded(
+              child: ElevatedButton(
+                onPressed: onConfirm,
+                child: Text('Konfirmasi', style: smallerTextStyle.copyWith(color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  minimumSize: Size(double.infinity, 36),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 
-  void _removeMeetingRoom(MeetingRoomForm room) {
-    setState(() {
-      _meetingRooms.remove(room);
-    });
-    print('DEBUG: Room removed. Remaining rooms: ${_meetingRooms.length}');
-    print('DEBUG: Remaining room IDs: ${_meetingRooms.map((r) => r.id).toList()}');
-  }
-
-  Future<void> _fetchRoomShapes() async {
-    try {
-      final response = await http.get(
-          Uri.parse('${Env.apiUrl}/api/room-shapes')
-      ).timeout(Duration(seconds: 10));
-      if (response.statusCode == 200) {
-        setState(() {
-          _roomShapes = List<Map<String, dynamic>>.from(json.decode(response.body));
-        });
-        print('DEBUG: Fetched ${_roomShapes.length} room shapes');
-      } else {
-        throw Exception('Failed to load room shapes');
-      }
-    } catch (e) {
-      print('DEBUG: Error fetching room shapes: $e');
-      NetworkErrorNotifier.instance.notifyError();
-    }
-  }
-
-  Future<void> _fetchRestaurants() async {
-    setState(() => _isSearching = true);
-    try {
-      final response = await http.get(
-          Uri.parse('${Env.apiUrl}/api/restaurants?status=$_selectedStatus&search=${_searchController.text}')
-      ).timeout(Duration(seconds: 10));
-      if (response.statusCode == 200) {
-        setState(() {
-          _restaurants = List<Map<String, dynamic>>.from(json.decode(response.body));
-        });
-        print('DEBUG: Fetched restaurants: ${json.encode(_restaurants)}');
-      } else {
-        throw Exception('Failed to load restaurants');
-      }
-    } catch (e) {
-      NetworkErrorNotifier.instance.notifyError();
-    } finally {
-      setState(() => _isSearching = false);
-    }
-  }
-
-  void _onSearchChanged(String query) {
-    if (_debounce?.isActive ?? false) _debounce!.cancel();
-    _debounce = Timer(const Duration(milliseconds: 500), () {
-      _fetchRestaurants();
-    });
-  }
-
-  void refreshPage() {
-    _refreshPage();
-  }
-
-  Future<void> _toggleRestaurantStatus(String id) async {
-    setState(() => _isLoading = true);
-    try {
-      final response = await http.post(
-        Uri.parse('${Env.apiUrl}/api/restaurants/$id/toggle-status'),
-      ).timeout(Duration(seconds: 10));
-      if (response.statusCode == 200) {
-        _fetchRestaurants();
-      } else {
-        throw Exception('Failed to toggle restaurant status');
-      }
-    } catch (e) {
-      NetworkErrorNotifier.instance.notifyError();
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _submitForm() async {
-    if (_formKey.currentState!.validate()) {
-      bool allRoomsValid = _meetingRooms.every((room) => room.selectedLayouts.isNotEmpty);
-      if (!allRoomsValid) {
-        _showDialog('Error', 'Each room must have at least one supported layout.');
-        return;
-      }
-
-      setState(() => _isLoading = true);
-
-      try {
-        final restaurantData = {
-          'restaurantName': _restaurantNameController.text,
-          'meetingRooms': _meetingRooms.map((room) => room.toJson()).toList(),
-        };
-
-        print('DEBUG: Submitting restaurant data:');
-        print(json.encode(restaurantData));  // Add this line
-
-        final response = await http.post(
-          Uri.parse('${Env.apiUrl}/api/restaurants'),
-          headers: {'Content-Type': 'application/json'},
-          body: json.encode(restaurantData),
-        ).timeout(Duration(seconds: 10));
-
-        if (response.statusCode == 201) {
-          _showDialog('Success', 'Restaurant added successfully');
-          _resetForm();
-          _fetchRestaurants();
-        } else {
-          throw Exception('Failed to add restaurant: ${response.statusCode} - ${response.body}');
-        }
-      } catch (e) {
-        print('Error submitting form: $e');
-        NetworkErrorNotifier.instance.notifyError();
-        _showDialog('Error', 'Failed to add restaurant. Please try again.');
-      } finally {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  Future<void> _updateRestaurant() async {
-    if (_formKey.currentState!.validate() && _selectedRestaurantId != null) {
-      setState(() => _isLoading = true);
-      try {
-        final restaurantData = {
-          'restaurantName': _restaurantNameController.text,
-          'meetingRooms': _meetingRooms.map((room) => room.toJson()).toList(),
-        };
-
-        print('DEBUG: Updating restaurant data:');
-        print(json.encode(restaurantData));
-
-        final response = await http.put(
-          Uri.parse('${Env.apiUrl}/api/restaurants/$_selectedRestaurantId'),
-          headers: {'Content-Type': 'application/json'},
-          body: json.encode(restaurantData),
-        ).timeout(Duration(seconds: 10));
-
-        print('DEBUG: Server response status: ${response.statusCode}');
-        print('DEBUG: Server response body: ${response.body}');
-
-        if (response.statusCode == 200) {
-          final updatedData = json.decode(response.body);
-          setState(() {
-            // Update the local state with the new data
-            final updatedRestaurant = updatedData['restaurant'];
-            _restaurantNameController.text = updatedRestaurant['restaurant_name'];
-            _meetingRooms = (updatedRestaurant['meeting_rooms'] as List<dynamic>)
-                .map((roomData) => MeetingRoomForm(
-              onRemove: _removeMeetingRoom,
-              supportedLayouts: _roomShapes,
-            )..populate(roomData))
-                .toList();
-          });
-          _showDialog('Success', 'Restaurant updated successfully');
-          _fetchRestaurants(); // Refresh the list of restaurants
-        } else {
-          final errorMessage = json.decode(response.body)['error'] ?? 'Unknown error occurred';
-          throw Exception('Failed to update restaurant: $errorMessage');
-        }
-      } catch (e) {
-        print('Error updating restaurant: $e');
-        NetworkErrorNotifier.instance.notifyError();
-        _showDialog('Error', 'Failed to update restaurant. Please try again.');
-      } finally {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  void _cancelUpdate() {
-    setState(() {
-      _isEditing = false;
-      _selectedRestaurantId = null;
-      _restaurantNameController.clear();
-      _meetingRooms.clear();
-      _addMeetingRoom();
-    });
-  }
-
-  void _resetForm() {
-    _restaurantNameController.clear();
-    setState(() {
-      _meetingRooms.clear();
-      _addMeetingRoom(); // Add one empty meeting room form
-    });
-  }
-
-  void _showDialog(String title, String content) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(content),
-        actions: [
-          TextButton(
-            child: Text('OK'),
-            onPressed: () => Navigator.pop(context),
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(label, style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          Expanded(
+            child: Text(value),
           ),
         ],
       ),
     );
   }
 
-  void _refreshPage() {
-    setState(() {
-      _isLoading = false;
-      _isSearching = false;
-      _isEditing = false;
-      _restaurants = [];
-      _selectedRestaurantId = null;
-      _selectedStatus = 'active';
-      _restaurantNameController.clear();
-      _searchController.clear();
-      _meetingRooms.clear();
-      _addMeetingRoom();
-    });
-    _fetchRestaurants();
-  }
-
-  Widget _buildButton({
-    required VoidCallback onPressed,
-    required String label,
-    required Color color,
-    IconData? icon, // Make icon optional
-    Color textColor = Colors.black,
-  }) {
-    return Container(
-      width: MediaQuery.of(context).size.width * 0.35,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          foregroundColor: textColor,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(5),
+  Widget _buildPackageRow(SelectedPackage sp) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 16),
+          Expanded(
+            child: Text(sp.package.name),
           ),
-          padding: EdgeInsets.symmetric(horizontal: 5, vertical: 5),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(fontSize: 12, color: textColor),
-        ),
+          SizedBox(width: 8),
+          Text('${sp.quantity}x'),
+          SizedBox(width: 8),
+          Text(_formatPrice(sp.package.priceInCents * sp.quantity)),
+        ],
       ),
     );
   }
 
-  Widget _buildRestaurantList() {
-    return _isSearching
-        ? Center(child: CircularProgressIndicator())
-        : AlternatingColorListView(
-      shrinkWrap: true,
-      physics: NeverScrollableScrollPhysics(),
-      children: _restaurants.map((restaurant) => ListTile(
-        title: Text(restaurant['restaurant_name']),
-        subtitle: Text('Status: ${restaurant['status']} | Meeting Rooms: ${restaurant['meeting_rooms']?.length ?? 0}'),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Switch(
-              value: restaurant['status'] == 'active',
-              onChanged: (value) => _toggleRestaurantStatus(restaurant['id']),
-            ),
-            IconButton(
-              icon: Icon(Icons.edit),
-              onPressed: () {
-                print('DEBUG: Edit button pressed for restaurant: ${restaurant['id']}');
-                print('DEBUG: Full restaurant data: $restaurant');
-                print('DEBUG: Meeting rooms data: ${restaurant['meeting_rooms']}');
-                setState(() {
-                  _isEditing = true;
-                  _selectedRestaurantId = restaurant['id'];
-                  _restaurantNameController.text = restaurant['restaurant_name'];
-                  _meetingRooms = (restaurant['meeting_rooms'] as List<dynamic>?)
-                      ?.map((roomData) {
-                    print('DEBUG: Processing room data: $roomData');
-                    final meetingRoom = MeetingRoomForm(
-                      onRemove: _removeMeetingRoom,
-                      supportedLayouts: _roomShapes,
-                    );
-                    meetingRoom.populate(roomData);
-                    print('DEBUG: Room ${roomData['room_name']} populated with layouts: ${meetingRoom.selectedLayouts}');
-                    return meetingRoom;
-                  }).toList() ?? [];
-                  if (_meetingRooms.isEmpty) _addMeetingRoom();
-                  print('DEBUG: Total meeting rooms after population: ${_meetingRooms.length}');
-                });
-              },
-            ),
-            IconButton(
-              icon: Icon(Icons.inventory),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => RestaurantPackages(
-                      restaurantId: restaurant['id'],
-                      restaurantName: restaurant['restaurant_name'],
-                    ),
-                  ),
-                );
-              },
-              tooltip: 'View Restaurant Packages',
-            ),
-          ],
+  Widget _buildDeliveryDateTime() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Waktu Pengiriman:', style: TextStyle(fontWeight: FontWeight.bold)),
+        SizedBox(height: 4),
+        Padding(
+          padding: EdgeInsets.only(left: 16),
+          child: Text(DateFormat('dd/MM/yyyy HH:mm').format(deliveryDateTime)),
         ),
-      )).toList(),
+      ],
     );
   }
 
+  Widget _buildTotalPrice() {
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.grey[200],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text('Total Harga', style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(_formatPrice(totalPrice), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        ],
+      ),
+    );
+  }
+
+  String _formatPrice(int priceInCents) {
+    final formatter = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp ',
+      decimalDigits: 0,
+    );
+    return formatter.format(priceInCents);
+  }
+}
+
+class PackageDropdown extends StatelessWidget {
+  final List<Package> availablePackages;
+  final Package? selectedPackage;
+  final Function(Package?) onChanged;
+  final bool isLoading;
+  final Function(BuildContext, String) showDescription;
+
+  PackageDropdown({
+    required this.availablePackages,
+    this.selectedPackage,
+    required this.onChanged,
+    required this.isLoading,
+    required this.showDescription,
+  });
+
   @override
   Widget build(BuildContext context) {
-    return LoadingOverlay(
-      isLoading: _isLoading,
-      loadingText: 'Please wait...',
-      child: SingleChildScrollView(
-        padding: EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Card(
-              color: Color(0xFFFFF8F3), // #fff8f3 background color
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+    print("DEBUG: Building PackageDropdown");
+    print("DEBUG: Available packages: ${availablePackages.length}");
+    print("DEBUG: Is loading: $isLoading");
+
+    return Stack(
+      children: [
+        DropdownButtonFormField<Package>(
+          value: selectedPackage,
+          items: availablePackages.map((package) => DropdownMenuItem<Package>(
+            value: package,
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  child: IconButton(
+                    icon: Icon(Icons.info_outline, size: 20),
+                    onPressed: () => showDescription(context, package.description),
+                    alignment: Alignment.center,
+                    padding: EdgeInsets.zero,
+                  ),
+                ),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text('${package.name} - ${package.formattedPrice}'),
+                ),
+              ],
+            ),
+          )).toList(),
+          onChanged: isLoading ? null : onChanged,
+          hint: Text(
+              isLoading
+                  ? 'Memuat paket...'
+                  : availablePackages.isEmpty
+                  ? 'Tidak ada paket terdaftar'
+                  : 'Pilih paket'
+          ),
+          isExpanded: true,
+          decoration: InputDecoration(
+            enabled: !isLoading,
+            border: OutlineInputBorder(),
+            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          ),
+        ),
+        if (isLoading)
+          Positioned.fill(
+            child: Container(
+              color: Colors.black12,
+              child: Center(
+                child: CircularProgressIndicator(),
               ),
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class MeetingRoom {
+  final String id;
+  final String name;
+  final int capacity;
+  List<RoomShape> supportedLayouts = [];
+
+  MeetingRoom({required this.id, required this.name, required this.capacity});
+
+  factory MeetingRoom.fromJson(Map<String, dynamic> json) {
+    return MeetingRoom(
+      id: json['id'],
+      name: json['room_name'],
+      capacity: json['capacity'],
+    );
+  }
+}
+
+class Restaurant {
+  final String id;
+  final String name;
+
+  Restaurant({required this.id, required this.name});
+
+  factory Restaurant.fromJson(Map<String, dynamic> json) {
+    return Restaurant(
+      id: json['id'] as String? ?? '',
+      name: json['restaurant_name'] as String? ?? '',
+    );
+  }
+}
+
+class RestaurantDropdown extends StatefulWidget {
+  final List<Restaurant> availableRestaurants;
+  final Restaurant? selectedRestaurant;
+  final Function(Restaurant?) onChanged;
+  final bool isLoading;
+  final Function(DateTime?) onDateTimeChanged;
+  final Function(dynamic) onRoomSelected;
+
+  RestaurantDropdown({
+    required this.availableRestaurants,
+    this.selectedRestaurant,
+    required this.onChanged,
+    required this.isLoading,
+    required this.onDateTimeChanged,
+    required this.onRoomSelected,
+  });
+
+  @override
+  _RestaurantDropdownState createState() => _RestaurantDropdownState();
+}
+
+class _RestaurantDropdownState extends State<RestaurantDropdown> {
+  DateTime? selectedDateTime;
+  List<dynamic> rooms = [];
+  bool isLoadingRooms = false;
+  String? selectedRoomId;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Stack(
+          children: [
+            DropdownButtonFormField<Restaurant>(
+              value: widget.selectedRestaurant,
+              items: widget.availableRestaurants.isEmpty
+                  ? []
+                  : widget.availableRestaurants.map((restaurant) => DropdownMenuItem<Restaurant>(
+                value: restaurant,
+                child: Text(restaurant.name),
+              )).toList(),
+              onChanged: (Restaurant? newValue) {
+                widget.onChanged(newValue);
+                setState(() {
+                  rooms = [];
+                });
+                if (newValue != null && selectedDateTime != null) {
+                  _fetchRoomDetails(newValue.id);
+                }
+              },
+              hint: Text(
+                  widget.isLoading
+                      ? 'Memuat restoran...'
+                      : widget.availableRestaurants.isEmpty
+                      ? 'Tidak ada restoran terdaftar'
+                      : 'Pilih restoran'
+              ),
+              isExpanded: true,
+              decoration: InputDecoration(
+                enabled: !widget.isLoading && widget.availableRestaurants.isNotEmpty,
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              ),
+              validator: (value) => value == null ? 'Mohon pilih restoran' : null,
+            ),
+            if (widget.isLoading)
+              Positioned.fill(
+                child: Container(
+                  color: Colors.black12,
+                  child: Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        SizedBox(height: 16),
+        ElevatedButton(
+          onPressed: () => _selectDateTime(context),
+          child: Text(selectedDateTime != null
+              ? DateFormat('dd/MM/yyyy HH:mm').format(selectedDateTime!)
+              : 'Pilih Tanggal dan Waktu'),
+        ),
+        SizedBox(height: 16),
+        if (selectedDateTime != null && widget.selectedRestaurant != null)
+          isLoadingRooms
+              ? CircularProgressIndicator()
+              : ListView.builder(
+            shrinkWrap: true,
+            itemCount: rooms.length,
+            itemBuilder: (context, index) {
+              final room = rooms[index];
+              final bool hasOrders = room['orders'] != null && room['orders'].isNotEmpty;
+              final bool isSelected = selectedRoomId == room['id'];
+
+              return Container(
+                decoration: BoxDecoration(
+                  color: isSelected ? Colors.blue.withOpacity(0.1) : null,
+                ),
+                child: ListTile(
+                  title: Text(room['room_name']),
+                  tileColor: isSelected ? Colors.blue.withOpacity(0.1) : null,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      TextFormField(
-                        decoration: InputDecoration(labelText: 'Restaurant Name'),
-                        controller: _restaurantNameController,
-                        validator: (value) => value?.isEmpty ?? true ? 'Please enter restaurant name' : null,
-                      ),
-                      SizedBox(height: 10),
-                      Divider(thickness: 1, color: Colors.grey[300]),
-                      SizedBox(height: 10),
-                      Text('Meeting Rooms:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      ..._meetingRooms,
-                      Container(
-                        width: MediaQuery.of(context).size.width * 1,
-                        child: ElevatedButton.icon(
-                          icon: Icon(Icons.add_circle, size: 18),
-                          label: Text(
-                            'Room',
-                            style: TextStyle(fontSize: 12),
+                      ElevatedButton(
+                        child: Text(
+                          hasOrders ? 'Cek' : 'Tersedia',
+                          style: TextStyle(
+                            color: hasOrders ? Colors.black : Colors.white,
                           ),
-                          onPressed: _addMeetingRoom,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Color(0xFFFFD700),
-                            foregroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        ),
+                        onPressed: () => _showAvailability(context, room),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: hasOrders ? Colors.yellow : Colors.green,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(5),
                           ),
                         ),
                       ),
-                      SizedBox(height: 20),
-                      Divider(thickness: 1, color: Colors.grey[300]),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          if (!_isEditing)
-                            _buildButton(
-                              onPressed: _submitForm,
-                              label: 'Tambah Restoran',
-                              color: Color(0xFFADFF2F),
-                            ),
-                          if (_isEditing) ...[
-                            _buildButton(
-                              onPressed: _updateRestaurant,
-                              label: 'Update',
-                              color: Color(0xFFADFF2F),
-                              icon: Icons.update,
-                            ),
-                            _buildButton(
-                              onPressed: _cancelUpdate,
-                              label: 'Cancel Update',
-                              color: Colors.red,
-                              icon: Icons.cancel,
-                              textColor: Colors.white,
-                            ),
-                          ],
-                        ],
+                      SizedBox(width: 8),
+                      ElevatedButton(
+                        child: Text(
+                          'Pilih',
+                          style: TextStyle(
+                            color: Colors.black, // Set Pilih button text to black
+                          ),
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            selectedRoomId = room['id'];
+                          });
+                          widget.onRoomSelected(room);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isSelected ? Colors.blue : Colors.white, // White background when not selected
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
-              ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  Future<void> _selectDateTime(BuildContext context) async {
+    final DateTime? date = await showDatePicker(
+      context: context,
+      initialDate: selectedDateTime ?? DateTime.now(),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(Duration(days: 365)),
+    );
+    if (date != null) {
+      final TimeOfDay? time = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(selectedDateTime ?? DateTime.now()),
+      );
+      if (time != null) {
+        setState(() {
+          selectedDateTime = DateTime(
+              date.year, date.month, date.day, time.hour, time.minute
+          );
+        });
+        widget.onDateTimeChanged(selectedDateTime);
+        if (widget.selectedRestaurant != null) {
+          _fetchRoomDetails(widget.selectedRestaurant!.id);
+        }
+      }
+    }
+  }
+
+  Future<void> _fetchRoomDetails(String restaurantId) async {
+    setState(() {
+      isLoadingRooms = true;
+    });
+    try {
+      final response = await http.get(Uri.parse(
+          '${Env.apiUrl}/api/restaurants/$restaurantId/room-details?date=${selectedDateTime!.toIso8601String()}'));
+
+      if (response.statusCode == 200) {
+        setState(() {
+          rooms = json.decode(response.body);
+          isLoadingRooms = false;
+        });
+      } else {
+        throw Exception('Failed to load room details');
+      }
+    } catch (e) {
+      print('Error fetching room details: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load room details. Please try again.')),
+      );
+      setState(() {
+        isLoadingRooms = false;
+      });
+    }
+  }
+
+  void _showAvailability(BuildContext context, dynamic room) {
+    final bool hasOrders = room['orders'] != null && room['orders'].isNotEmpty;
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Ketersediaan Ruangan: ${room['room_name']}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (hasOrders) ...[
+                Text('Pesanan yang ada:', style: TextStyle(fontWeight: FontWeight.bold)),
+                SizedBox(height: 8),
+                ...room['orders'].map<Widget>((order) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Pelanggan: ${order['customer_name']}'),
+                        Text('Keperluan: ${order['order_purpose']}'),
+                        Text('Waktu: ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.parse(order['delivery_datetime']))}'),
+                        Text('Jumlah Orang: ${order['number_of_people']}'),
+                        Divider(),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ] else
+                Text('Tidak ada booking pada ruangan ${room['room_name']} pada hari ${DateFormat('dd/MM/yyyy').format(selectedDateTime!)}'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              child: Text('Tutup'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
             ),
-            SizedBox(height: 20),
-            Divider(thickness: 1, color: Colors.grey[300]),
-            SizedBox(height: 20),
-            TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                labelText: 'Search Restaurants',
-                suffixIcon: Icon(Icons.search),
-              ),
-              onChanged: _onSearchChanged,
-            ),
-            SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                FilterChip(
-                  label: Text('All'),
-                  selected: _selectedStatus == 'all',
-                  onSelected: (selected) {
-                    setState(() => _selectedStatus = 'all');
-                    _fetchRestaurants();
-                  },
-                ),
-                FilterChip(
-                  label: Text('Active'),
-                  selected: _selectedStatus == 'active',
-                  onSelected: (selected) {
-                    setState(() => _selectedStatus = 'active');
-                    _fetchRestaurants();
-                  },
-                ),
-                FilterChip(
-                  label: Text('Inactive'),
-                  selected: _selectedStatus == 'inactive',
-                  onSelected: (selected) {
-                    setState(() => _selectedStatus = 'inactive');
-                    _fetchRestaurants();
-                  },
-                ),
-              ],
-            ),
-            SizedBox(height: 20),
-            Text('Restaurants:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            _buildRestaurantList(),
           ],
-        ),
-      ),
+        );
+      },
     );
   }
 }
 
-class MeetingRoomForm extends StatefulWidget {
-  final TextEditingController nameController = TextEditingController();
-  final TextEditingController capacityController = TextEditingController();
-  final TextEditingController priceController = TextEditingController();
-  final List<Map<String, dynamic>> supportedLayouts; // Changed from Map<String, String> to Map<String, dynamic>
-  final Function(MeetingRoomForm) onRemove;
-  List<String> selectedLayouts = [];
-  String? id;
+class RoomShape {
+  final String id;
+  final String shapeName;
 
-  MeetingRoomForm({
-    Key? key,
-    required this.onRemove,
-    required this.supportedLayouts,
-  }) : super(key: key) {
-    print('DEBUG: MeetingRoomForm created with supported layouts: $supportedLayouts');
-  }
+  RoomShape({required this.id, required this.shapeName});
 
-  void dispose() {
-    nameController.dispose();
-    capacityController.dispose();
-    priceController.dispose();
-  }
-
-  void populate(Map<String, dynamic> data) {
-    print('DEBUG: Populating MeetingRoomForm with data: $data');
-    id = data['id'];
-    nameController.text = data['room_name'] ?? '';
-    capacityController.text = data['capacity']?.toString() ?? '';
-    priceController.text = data['price_per_hour']?.toString() ?? '';
-    selectedLayouts = List<String>.from(data['supported_layout_names'] ?? []);
-    print('DEBUG: Populated layouts for ${data['room_name']}: $selectedLayouts');
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': nameController.text,
-      'capacity': int.tryParse(capacityController.text) ?? 0,
-      'pricePerHour': int.tryParse(priceController.text) ?? 0,
-      'supportedLayouts': selectedLayouts.map((name) =>
-      supportedLayouts.firstWhere((layout) => layout['shape_name'] == name)['id']
-      ).toList(),
-    };
+  factory RoomShape.fromJson(Map<String, dynamic> json) {
+    return RoomShape(
+      id: json['id'],
+      shapeName: json['shape_name'],
+    );
   }
 
   @override
-  _MeetingRoomFormState createState() => _MeetingRoomFormState();
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+          other is RoomShape &&
+              runtimeType == other.runtimeType &&
+              id == other.id &&
+              shapeName == other.shapeName;
+
+  @override
+  int get hashCode => id.hashCode ^ shapeName.hashCode;
 }
 
-class _MeetingRoomFormState extends State<MeetingRoomForm> {
-  @override
-  Widget build(BuildContext context) {
-    print('DEBUG: Building MeetingRoomForm widget for ${widget.nameController.text}');
-    print('DEBUG: Current selected layouts: ${widget.selectedLayouts}');
-    return Card(
-      margin: EdgeInsets.symmetric(vertical: 10),
-      color: Colors.white,
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextFormField(
-              decoration: InputDecoration(labelText: 'Room Name'),
-              controller: widget.nameController,
-              validator: (value) =>
-              value?.isEmpty ?? true ? 'Please enter room name' : null,
-              onChanged: (_) => setState(() {}),
-            ),
-            TextFormField(
-              decoration: InputDecoration(labelText: 'Capacity'),
-              controller: widget.capacityController,
-              keyboardType: TextInputType.number,
-              validator: (value) =>
-              value?.isEmpty ?? true ? 'Please enter room capacity' : null,
-            ),
-            TextFormField(
-              decoration: InputDecoration(labelText: 'Price per Hour (IDR)'),
-              controller: widget.priceController,
-              keyboardType: TextInputType.number,
-              validator: (value) =>
-              value?.isEmpty ?? true ? 'Please enter price per hour' : null,
-            ),
-            SizedBox(height: 10),
-            Text('Supported Layouts:', style: TextStyle(fontSize: 16)),
-            Wrap(
-              spacing: 8,
-              children: widget.supportedLayouts.map((layout) {
-                print('DEBUG: Creating FilterChip for layout: ${layout['shape_name']}');
-                return FilterChip(
-                  label: Text(layout['shape_name']!),
-                  selected: widget.selectedLayouts.contains(layout['shape_name']),
-                  onSelected: (bool selected) {
-                    setState(() {
-                      if (selected) {
-                        widget.selectedLayouts.add(layout['shape_name']!);
-                      } else {
-                        widget.selectedLayouts.remove(layout['shape_name']);
-                      }
-                    });
-                    print('DEBUG: Layout ${layout['shape_name']} ${selected ? 'selected' : 'deselected'} for ${widget.nameController.text}');
-                    print('DEBUG: Updated selected layouts: ${widget.selectedLayouts}');
-                  },
-                );
-              }).toList(),
-            ),
-            SizedBox(height: 10),
-            ElevatedButton(
-              onPressed: () => widget.onRemove(widget),
-              child: Text('Remove Room'),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            ),
-          ],
-        ),
-      ),
+class OrderPurpose {
+  final int id;
+  final String name;
+  final String nameEn;
+
+  OrderPurpose({required this.id, required this.name, required this.nameEn});
+
+  factory OrderPurpose.fromJson(Map<String, dynamic> json) {
+    return OrderPurpose(
+      id: json['id'] as int,
+      name: json['name'] as String,
+      nameEn: json['name_en'] as String,
     );
   }
 }

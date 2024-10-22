@@ -1,0 +1,300 @@
+I want to start saving to database after the user is filling everything
+
+please help me check and delve deeper on my code, because i've made a lot of alter table.
+
+Please give me brief explanation, focus on the code u're giving to me. Make it good enough for me not to be confused regarding replacing ur code to my code/modifying it
+
+this is my table structure:
+
+CREATE TABLE customers (
+
+  id char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  name varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  phone_number varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  address text COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  firebase_uid varchar(28) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  PRIMARY KEY (`id`),
+
+  UNIQUE KEY idx_phone_number (`phone_number`),
+
+  KEY idx_firebase_uid (`firebase_uid`),
+
+  CONSTRAINT fk_customers_users FOREIGN KEY (`firebase_uid`) REFERENCES users (`firebase_uid`)
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE facility (
+
+  id char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  facility_name varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  PRIMARY KEY (`id`),
+
+  UNIQUE KEY idx_facility_name (`facility_name`)
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE meeting_room (
+
+  id char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  restaurant_id char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  room_name varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  capacity int(11) NOT NULL,
+
+  price_per_hour bigint(20) NOT NULL,
+
+  created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+
+  KEY idx_restaurant_id (`restaurant_id`),
+
+  CONSTRAINT fk_meeting_room_restaurant FOREIGN KEY (`restaurant_id`) REFERENCES restaurant (`id`) ON DELETE CASCADE
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE order_items (
+
+  id char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  id_order char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  id_package char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  quantity int(11) NOT NULL,
+
+  price_per_item int(11) NOT NULL,
+
+  created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+
+  KEY idx_id_order (`id_order`),
+
+  KEY idx_id_package (`id_package`),
+
+  CONSTRAINT fk_order_items_orders FOREIGN KEY (`id_order`) REFERENCES orders (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+
+  CONSTRAINT fk_order_items_packages FOREIGN KEY (`id_package`) REFERENCES packages (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE order_purposes (
+
+  id int(11) NOT NULL AUTO_INCREMENT,
+
+  name varchar(100) NOT NULL,
+
+  name_en varchar(100) NOT NULL,
+
+  is_active tinyint(1) DEFAULT '1',
+
+  created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+
+  KEY idx_order_purposes_name (`name`),
+
+  KEY idx_order_purposes_name_en (`name_en`)
+
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8;
+
+CREATE TABLE orders (
+
+  id char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  id_customer char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  id_restaurant char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  id_room_shape char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  number_of_people int(11) NOT NULL,
+
+  order_date datetime NOT NULL,
+
+  delivery_datetime datetime NOT NULL,
+
+  status enum('pending','confirmed','delivered','cancelled') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',
+
+  created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  id_order_purpose int(11) NOT NULL,
+
+  firebase_uid varchar(28) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  meeting_room_id char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+
+  PRIMARY KEY (`id`),
+
+  KEY idx_id_customer (`id_customer`),
+
+  KEY idx_id_restaurant (`id_restaurant`),
+
+  KEY idx_order_date (`order_date`),
+
+  KEY idx_delivery_datetime (`delivery_datetime`),
+
+  KEY idx_status (`status`),
+
+  KEY fk_orders_order_purposes (`id_order_purpose`),
+
+  KEY fk_orders_users (`firebase_uid`),
+
+  KEY fk_orders_room_shape (`id_room_shape`),
+
+  KEY idx_meeting_room_id (`meeting_room_id`),
+
+  CONSTRAINT fk_orders_customers FOREIGN KEY (`id_customer`) REFERENCES customers (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+
+  CONSTRAINT fk_orders_meeting_room FOREIGN KEY (`meeting_room_id`) REFERENCES meeting_room (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+
+  CONSTRAINT fk_orders_order_purposes FOREIGN KEY (`id_order_purpose`) REFERENCES order_purposes (`id`),
+
+  CONSTRAINT fk_orders_restaurant FOREIGN KEY (`id_restaurant`) REFERENCES restaurant (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+
+  CONSTRAINT fk_orders_room_shape FOREIGN KEY (`id_room_shape`) REFERENCES room_shape (`id`),
+
+  CONSTRAINT fk_orders_users FOREIGN KEY (`firebase_uid`) REFERENCES users (`firebase_uid`)
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE packages (
+
+  id char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  id_restaurant char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  package_name varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  description text COLLATE utf8mb4_unicode_ci,
+
+  price int(11) NOT NULL,
+
+  status enum('active','inactive') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active',
+
+  created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  price_in_cents int(11) DEFAULT NULL,
+
+  PRIMARY KEY (`id`),
+
+  KEY idx_id_master_restaurant (`id_restaurant`),
+
+  KEY idx_status (`status`),
+
+  KEY idx_price (`price`),
+
+  CONSTRAINT fk_packages_restaurant FOREIGN KEY (`id_restaurant`) REFERENCES restaurant (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE restaurant (
+
+  id char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  restaurant_name varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  status enum('active','inactive') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active',
+
+  created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+
+  UNIQUE KEY idx_restaurant_name (`restaurant_name`),
+
+  KEY idx_status (`status`)
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE room_added_facility (
+
+  room_id char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  facility_id char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  PRIMARY KEY (`room_id`,`facility_id`),
+
+  KEY idx_facility_id (`facility_id`),
+
+  CONSTRAINT fk_added_facility_facility FOREIGN KEY (`facility_id`) REFERENCES facility (`id`) ON DELETE CASCADE,
+
+  CONSTRAINT fk_added_facility_room FOREIGN KEY (`room_id`) REFERENCES meeting_room (`id`) ON DELETE CASCADE
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE room_shape (
+
+  id char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  shape_name varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  PRIMARY KEY (`id`),
+
+  UNIQUE KEY idx_shape_name (`shape_name`)
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE room_supported_shape (
+
+  room_id char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  shape_id char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  PRIMARY KEY (`room_id`,`shape_id`),
+
+  KEY idx_shape_id (`shape_id`),
+
+  CONSTRAINT fk_supported_shape_room FOREIGN KEY (`room_id`) REFERENCES meeting_room (`id`) ON DELETE CASCADE,
+
+  CONSTRAINT fk_supported_shape_shape FOREIGN KEY (`shape_id`) REFERENCES room_shape (`id`) ON DELETE CASCADE
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE users (
+
+  id int(11) NOT NULL AUTO_INCREMENT,
+
+  firebase_uid varchar(28) COLLATE utf8mb4_unicode_ci NOT NULL,
+
+  email varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+
+  display_name varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+
+  created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  last_login timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+
+  UNIQUE KEY firebase_uid (`firebase_uid`),
+
+  UNIQUE KEY unique_firebase_uid (`firebase_uid`)
+
+) ENGINE=InnoDB AUTO_INCREMENT=18 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
