@@ -51,6 +51,7 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
   final _phoneController = TextEditingController();
   dynamic _selectedRoom;
 
+  String _memo = '';
   String? _selectedCustomerId;
   String? _selectedRestaurantId;
   String _formatPrice(int priceInCents) {
@@ -78,6 +79,55 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
   bool _isRestaurantsLoading = true;
   bool _isCustomerSelected = false;
 
+  bool _validateOrder() {
+    if (_formKey.currentState == null || !_formKey.currentState!.validate()) {
+      return false;
+    }
+
+    if (_selectedCustomer == null) {
+      showTopSnackBar('Mohon pilih pelanggan dari daftar');
+      return false;
+    }
+
+    if (_selectedPurpose == null) {
+      showTopSnackBar('Mohon pilih keperluan');
+      return false;
+    }
+
+    if (_selectedRestaurant == null) {
+      showTopSnackBar('Mohon pilih restoran');
+      return false;
+    }
+
+    if (_selectedRoom == null) {
+      showTopSnackBar('Mohon pilih ruangan');
+      return false;
+    }
+
+    if (_selectedLayout == null) {
+      showTopSnackBar('Mohon pilih layout ruangan');
+      return false;
+    }
+
+    if (_numberOfPeople <= 0) {
+      showTopSnackBar('Mohon masukkan jumlah orang');
+      return false;
+    }
+
+    if (_deliveryDateTime == null) {
+      showTopSnackBar('Mohon pilih tanggal dan waktu');
+      return false;
+    }
+
+    if (_selectedPackages.isEmpty) {
+      showTopSnackBar('Mohon pilih minimal satu paket');
+      return false;
+    }
+
+    return true;
+  }
+
+
   Restaurant? _selectedRestaurant;
   Package? _selectedPackage;
   DateTime? _deliveryDateTime;
@@ -88,6 +138,9 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
   int _numberOfPeople = 0;
 
   int _calculateTotalPrice() {
+    if (_selectedPackages.isEmpty) {
+      return 0;
+    }
     return _selectedPackages.fold(0, (total, selectedPackage) =>
     total + (selectedPackage.package.priceInCents * selectedPackage.quantity));
   }
@@ -101,27 +154,61 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
   }
 
   Widget _buildNumberOfPeopleField() {
-    return TextFormField(
-      decoration: InputDecoration(
-        labelText: 'Jumlah Orang',
-        border: OutlineInputBorder(),
-      ),
-      keyboardType: TextInputType.number,
-      validator: (value) {
-        if (value == null || value.isEmpty) {
-          return 'Mohon masukkan jumlah orang';
-        }
-        final number = int.tryParse(value);
-        if (number == null || number <= 0) {
-          return 'Jumlah orang harus lebih dari 0';
-        }
-        return null;
-      },
-      onChanged: (value) {
-        setState(() {
-          _numberOfPeople = int.tryParse(value) ?? 0;
-        });
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextFormField(
+          decoration: InputDecoration(
+            labelText: 'Jumlah Orang',
+            border: OutlineInputBorder(),
+            suffixText: _selectedRoom != null ? 'Kapasitas: ${_selectedRoom['capacity']}' : null,
+            fillColor: _selectedRoom != null && _numberOfPeople > _selectedRoom['capacity']
+                ? Colors.yellow[50]
+                : null,
+            filled: _selectedRoom != null && _numberOfPeople > _selectedRoom['capacity'],
+            enabledBorder: _selectedRoom != null && _numberOfPeople > _selectedRoom['capacity']
+                ? OutlineInputBorder(borderSide: BorderSide(color: Colors.yellow[700]!))
+                : null,
+          ),
+          keyboardType: TextInputType.number,
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Mohon masukkan jumlah orang';
+            }
+            final number = int.tryParse(value);
+            if (number == null || number <= 0) {
+              return 'Jumlah orang harus lebih dari 0';
+            }
+            return null;
+          },
+          onChanged: (value) {
+            setState(() {
+              _numberOfPeople = int.tryParse(value) ?? 0;
+            });
+          },
+        ),
+        if (_selectedRoom != null && _numberOfPeople > _selectedRoom['capacity'])
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Row(
+              children: [
+                Icon(
+                    Icons.warning_amber_rounded,
+                    size: 16,
+                    color: Colors.yellow[700]
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'Jumlah orang melebihi kapasitas ruangan',
+                  style: TextStyle(
+                    color: Colors.yellow[700],
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 
@@ -148,7 +235,7 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
       onRoomSelected: (dynamic room) {
         setState(() {
           _selectedRoom = room;
-          _selectedLayout = null; // Reset layout when new room is selected
+          _selectedLayout = null;
         });
       },
       onLayoutSelected: (RoomShape? layout) {
@@ -156,6 +243,8 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
           _selectedLayout = layout;
         });
       },
+      showMemoModal: _showMemoModal,  // Add this
+      memo: _memo,  // Add this
     );
   }
 
@@ -194,6 +283,54 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
           ),
         ),
       ),
+    );
+  }
+
+  void _showMemoModal() {
+    final TextEditingController memoController = TextEditingController(text: _memo);
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Tambah Memo'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: memoController,
+                maxLines: 5,
+                decoration: InputDecoration(
+                  hintText: 'Tulis memo/catatan di sini...',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Batal'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _memo = memoController.text;
+                });
+                Navigator.of(context).pop();
+                if (_memo.isNotEmpty) {
+                  showTopSnackBar('Memo berhasil disimpan');
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+              child: Text('Simpan'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -256,12 +393,15 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
   }
 
   void _selectCustomer(Map<String, dynamic> customer) {
+    print("DEBUG: Selected customer data: $customer"); // Add this line
     setState(() {
       _selectedCustomer = customer;
       _selectedCustomerId = customer['id'];
       _nameController.text = customer['name'];
-      _addressController.text = customer['address'];
-      _phoneController.text = customer['phone_number'];
+      _addressController.clear(); // Clear first
+      _phoneController.clear(); // Clear first
+      _addressController.text = customer['address'] ?? '';
+      _phoneController.text = customer['phone_number'] ?? '';
       _searchResults = [];
       _isTyping = false;
       _isCustomerSelected = true;
@@ -290,88 +430,85 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
     }
   }
 
-  void _submitForm() async {
-    print("DEBUG: _submitForm called");
-    if (_formKey.currentState!.validate()) {
-      _formKey.currentState!.save();
+  void _submitForm() {
+    print("DEBUG: Submit button pressed");
 
-      if (_selectedLayout == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Mohon pilih layout ruangan')),
-        );
-        return;
-      }
-
-      if (_numberOfPeople <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Mohon masukkan jumlah orang')),
-        );
-        return;
-      }
-
-      if (_selectedCustomer == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Mohon pilih pelanggan dari daftar')),
-        );
-        return;
-      }
-
-      if (_selectedPurpose == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Mohon pilih keperluan')),
-        );
-        return;
-      }
-
-      if (_deliveryDateTime == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Mohon pilih tanggal dan waktu pengiriman')),
-        );
-        return;
-      }
-
-      showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return OrderConfirmationModal(
-            customerName: _nameController.text,
-            restaurantName: _selectedRestaurant?.name ?? '',
-            selectedPackages: _selectedPackages,
-            deliveryDateTime: _deliveryDateTime!,
-            totalPrice: _calculateTotalPrice(),
-            purpose: _selectedPurpose!,
-            onConfirm: () {
-              Navigator.of(context).pop();
-              _processOrder();
-            },
-            onCancel: () {
-              Navigator.of(context).pop();
-            },
-          );
-        },
-      );
+    if (!_validateOrder()) {
+      return;
     }
+
+    print("DEBUG: Showing confirmation dialog");
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return OrderConfirmationModal(
+          customerName: _nameController.text,
+          restaurantName: _selectedRestaurant?.name ?? '',
+          selectedPackages: _selectedPackages,
+          deliveryDateTime: _deliveryDateTime!,
+          totalPrice: _calculateTotalPrice(),
+          purpose: _selectedPurpose!,
+          roomName: _selectedRoom['room_name'] ?? '',
+          roomShape: _selectedLayout?.shapeName ?? '',
+          numberOfPeople: _numberOfPeople,
+          memo: _memo,
+          onConfirm: () {
+            Navigator.of(context).pop();
+            _processOrder();
+          },
+          onCancel: () {
+            Navigator.of(context).pop();
+          },
+        );
+      },
+    );
   }
+
 
   void _addSelectedPackage() {
     if (_selectedPackage != null) {
       setState(() {
         _addPackage(_selectedPackage!);
-        // Optionally, reset _selectedPackage to null after adding
-        // _selectedPackage = null;
       });
-      // Show a snackbar to confirm the package was added
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${_selectedPackage!.name} added to the order'),
           duration: Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
+          behavior: SnackBarBehavior.floating, // Add this
+          margin: EdgeInsets.only(
+            bottom: MediaQuery.of(context).size.height - 100,
+            left: 10,
+            right: 10,
+          ), // Add this to position at top
         ),
       );
     }
   }
 
+  void showTopSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.only(
+          bottom: MediaQuery.of(context).size.height - 100,
+          left: 10,
+          right: 10,
+        ),
+      ),
+    );
+  }
+
   void _processOrder() async {
+    print("DEBUG: Starting order submission process");
+
+    if (_selectedPackages.isEmpty) {
+      showTopSnackBar('Mohon pilih minimal satu paket');
+      return;
+    }
+
     setState(() {
       _isSubmitting = true;
     });
@@ -380,19 +517,7 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
     final String? firebaseUid = user?.uid;
 
     if (firebaseUid == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('User not logged in. Please log in and try again.')),
-      );
-      setState(() {
-        _isSubmitting = false;
-      });
-      return;
-    }
-
-    if (_selectedRoom == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please select a meeting room')),
-      );
+      showTopSnackBar('User not logged in');
       setState(() {
         _isSubmitting = false;
       });
@@ -403,17 +528,20 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
       'id_customer': _selectedCustomerId,
       'id_restaurant': _selectedRestaurantId,
       'id_room_shape': _selectedLayout!.id,
-      'meeting_room_id': _selectedRoom['id'], // Add this line
+      'meeting_room_id': _selectedRoom['id'],
       'number_of_people': _numberOfPeople,
-      'id_order_purpose': _selectedPurpose!.id.toString(),
+      'id_order_purpose': _selectedPurpose!.id,
       'delivery_datetime': _deliveryDateTime!.toIso8601String(),
+      'memo': _memo,
       'order_items': _selectedPackages.map((sp) => {
         'id_package': sp.package.id,
         'quantity': sp.quantity,
-        'price': sp.package.priceInCents,
+        'price_per_item': sp.package.priceInCents
       }).toList(),
       'firebase_uid': firebaseUid,
     };
+
+    print("DEBUG: Order data prepared: ${json.encode(orderData)}");
 
     try {
       final response = await http.post(
@@ -422,11 +550,17 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
         body: json.encode(orderData),
       );
 
+      print("DEBUG: Order submission response status: ${response.statusCode}");
+      print("DEBUG: Order submission response body: ${response.body}");
+
       setState(() {
         _isSubmitting = false;
       });
 
       if (response.statusCode == 201) {
+        final responseData = json.decode(response.body);
+        print("DEBUG: Order saved with ID: ${responseData['id']}");
+
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
@@ -446,19 +580,19 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
           ),
         );
       } else {
-        throw Exception('Failed to save order');
+        throw Exception('Failed to save order: ${response.body}');
       }
     } catch (e) {
+      print("DEBUG: Error during order submission: $e");
       NetworkErrorNotifier.instance.notifyError();
       setState(() {
         _isSubmitting = false;
       });
-      print('Error saving order: $e');
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
           title: Text('Error'),
-          content: Text('There was an error submitting your order. Please try again.'),
+          content: Text('Failed to submit order: $e'),
           actions: [
             TextButton(
               child: Text('OK'),
@@ -716,6 +850,7 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
 
       if (response.statusCode == 200) {
         final List<dynamic> results = json.decode(response.body);
+        print("DEBUG: Search results: $results"); // Add this line
         setState(() {
           _searchResults = results.cast<Map<String, dynamic>>();
           _isTyping = false;
@@ -793,6 +928,19 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
         TypeAheadFormField<Map<String, dynamic>>(
           textFieldConfiguration: TextFieldConfiguration(
             controller: _nameController,
+            onTap: () {
+              setState(() {
+                _isFieldFocused = true;  // Add this
+              });
+            },
+            onChanged: (value) {
+              if (value.isEmpty) {
+                setState(() {
+                  _isCustomerSelected = false;
+                  _selectedCustomer = null;
+                });
+              }
+            },
             decoration: InputDecoration(
               labelText: 'Nama Pelanggan',
               hintText: _isCustomerSelected ? '' : 'Ketik untuk mulai mencari',
@@ -819,16 +967,29 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
             if (pattern.isEmpty || _isCustomerSelected) {
               return [];
             }
-            return _debouncedSearch(pattern);
+            return _searchCustomers(pattern);
           },
           itemBuilder: (context, suggestion) {
+            print("DEBUG: Building suggestion item: $suggestion"); // Add this debug print
             return ListTile(
-              title: Text(suggestion['name']),
-              subtitle: Text('${suggestion['address']} - ${suggestion['phone_number']}'),
+              title: Text(suggestion['name'] ?? ''),
+              subtitle: Text('${suggestion['address'] ?? ''} - ${suggestion['phone_number'] ?? ''}'),
             );
           },
           onSuggestionSelected: (suggestion) {
-            _selectCustomer(suggestion);
+            print("DEBUG: Suggestion selected: $suggestion"); // Add this debug print
+            setState(() {
+              _selectedCustomer = suggestion;
+              _selectedCustomerId = suggestion['id'];
+              _nameController.text = suggestion['name'] ?? '';
+              _addressController.text = suggestion['address'] ?? '';
+              _phoneController.text = suggestion['phone_number'] ?? '';
+              _searchResults = [];
+              _isTyping = false;
+              _isCustomerSelected = true;
+              _isFieldFocused = false;  // Add this
+            });
+            FocusScope.of(context).unfocus();
           },
           noItemsFoundBuilder: (context) {
             return _isTyping && !_isCustomerSelected
@@ -861,6 +1022,7 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
                   _nameController.clear();
                   _addressController.clear();
                   _phoneController.clear();
+                  _isFieldFocused = false;  // Add this
                 });
               },
               child: Container(
@@ -946,45 +1108,58 @@ class _SalesCustomerEnrollmentFormState extends State<SalesCustomerEnrollmentFor
   }
 
   Widget _buildPackageSelection() {
-    print("DEBUG: Building package selection");
-    print("DEBUG: _isPackagesLoading: $_isPackagesLoading");
-    print("DEBUG: _availablePackages length: ${_availablePackages.length}");
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: PackageDropdown(
-            availablePackages: _availablePackages,
-            selectedPackage: _selectedPackage,
-            onChanged: (Package? newValue) {
-              setState(() {
-                _selectedPackage = newValue;
-              });
-            },
-            isLoading: _isPackagesLoading,
-            showDescription: _showDescription,
-          ),
-        ),
-        SizedBox(width: 10),
-        ElevatedButton(
-          onPressed: _selectedPackage != null ? _addSelectedPackage : null,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.add, size: 20),
-              SizedBox(width: 4),
-              Text('Add'),
-            ],
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green, // Replaces primary
-            foregroundColor: Colors.white, // Replaces onPrimary
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+        Row(
+          children: [
+            Expanded(
+              child: PackageDropdown(
+                availablePackages: _availablePackages,
+                selectedPackage: _selectedPackage,
+                onChanged: (Package? newValue) {
+                  setState(() {
+                    _selectedPackage = newValue;
+                  });
+                },
+                isLoading: _isPackagesLoading,
+                showDescription: _showDescription,
+              ),
             ),
-            elevation: 2,
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          ),
+            SizedBox(width: 10),
+            ElevatedButton(
+              onPressed: _selectedPackage != null ? _addSelectedPackage : null,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.add, size: 20),
+                  SizedBox(width: 4),
+                  Text('Add'),
+                ],
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                elevation: 2,
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+            ),
+          ],
         ),
+        if (_selectedPackages.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Text(
+              'Pilih minimal satu paket',
+              style: TextStyle(
+                color: Colors.red[700],
+                fontSize: 12,
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -1156,170 +1331,6 @@ class Package {
   }
 }
 
-class SelectedPackage {
-  final Package package;
-  int quantity;
-
-  SelectedPackage({required this.package, this.quantity = 1});
-}
-
-class OrderConfirmationModal extends StatelessWidget {
-  final String customerName;
-  final String restaurantName;
-  final List<SelectedPackage> selectedPackages;
-  final DateTime deliveryDateTime;
-  final int totalPrice;
-  final VoidCallback onConfirm;
-  final OrderPurpose purpose;
-  final VoidCallback onCancel;
-
-  OrderConfirmationModal({
-    required this.customerName,
-    required this.restaurantName,
-    required this.selectedPackages,
-    required this.deliveryDateTime,
-    required this.totalPrice,
-    required this.onConfirm,
-    required this.purpose,
-    required this.onCancel,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final TextStyle defaultTextStyle = Theme.of(context).textTheme.labelLarge ?? TextStyle();
-    final TextStyle smallerTextStyle = defaultTextStyle.copyWith(
-      fontSize: (defaultTextStyle.fontSize ?? 14) - 2,
-    );
-
-    return AlertDialog(
-      title: Text('Konfirmasi Pesanan', style: TextStyle(fontWeight: FontWeight.bold)),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildInfoRow('Pelanggan', customerName),
-            _buildInfoRow('Restoran', restaurantName),
-            _buildInfoRow('Keperluan', purpose.name),
-            SizedBox(height: 16),
-            Text('Paket yang dipesan:', style: TextStyle(fontWeight: FontWeight.bold)),
-            SizedBox(height: 8),
-            ...selectedPackages.map((sp) => _buildPackageRow(sp)),
-            SizedBox(height: 16),
-            _buildDeliveryDateTime(),
-            SizedBox(height: 16),
-            _buildTotalPrice(),
-          ],
-        ),
-      ),
-      actions: [
-        Row(
-          children: [
-            Expanded(
-              child: TextButton(
-                onPressed: onCancel,
-                child: Text('Batal', style: smallerTextStyle.copyWith(color: Colors.white)),
-                style: TextButton.styleFrom(
-                  backgroundColor: Colors.grey[600],
-                  minimumSize: Size(double.infinity, 36),
-                ),
-              ),
-            ),
-            SizedBox(width: 8),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: onConfirm,
-                child: Text('Konfirmasi', style: smallerTextStyle.copyWith(color: Colors.white)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  minimumSize: Size(double.infinity, 36),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(label, style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-          Expanded(
-            child: Text(value),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPackageRow(SelectedPackage sp) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(width: 16),
-          Expanded(
-            child: Text(sp.package.name),
-          ),
-          SizedBox(width: 8),
-          Text('${sp.quantity}x'),
-          SizedBox(width: 8),
-          Text(_formatPrice(sp.package.priceInCents * sp.quantity)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDeliveryDateTime() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Waktu Pengiriman:', style: TextStyle(fontWeight: FontWeight.bold)),
-        SizedBox(height: 4),
-        Padding(
-          padding: EdgeInsets.only(left: 16),
-          child: Text(DateFormat('dd/MM/yyyy HH:mm').format(deliveryDateTime)),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTotalPrice() {
-    return Container(
-      padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.grey[200],
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text('Total Harga', style: TextStyle(fontWeight: FontWeight.bold)),
-          Text(_formatPrice(totalPrice), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-        ],
-      ),
-    );
-  }
-
-  String _formatPrice(int priceInCents) {
-    final formatter = NumberFormat.currency(
-      locale: 'id_ID',
-      symbol: 'Rp ',
-      decimalDigits: 0,
-    );
-    return formatter.format(priceInCents);
-  }
-}
-
 class PackageDropdown extends StatelessWidget {
   final List<Package> availablePackages;
   final Package? selectedPackage;
@@ -1394,6 +1405,363 @@ class PackageDropdown extends StatelessWidget {
   }
 }
 
+class SelectedPackage {
+  final Package package;
+  int quantity;
+
+  SelectedPackage({required this.package, this.quantity = 1});
+}
+
+class OrderConfirmationModal extends StatelessWidget {
+  final String customerName;
+  final String restaurantName;
+  final List<SelectedPackage> selectedPackages;
+  final DateTime deliveryDateTime;
+  final int totalPrice;
+  final VoidCallback onConfirm;
+  final OrderPurpose purpose;
+  final VoidCallback onCancel;
+  final String roomName;
+  final String roomShape;
+  final String? memo;  // Add this
+  final int numberOfPeople;
+
+  OrderConfirmationModal({
+    required this.customerName,
+    required this.restaurantName,
+    required this.selectedPackages,
+    required this.deliveryDateTime,
+    required this.totalPrice,
+    required this.onConfirm,
+    required this.purpose,
+    required this.onCancel,
+    required this.roomName,
+    required this.roomShape,
+    required this.numberOfPeople,
+    this.memo,  // Add this
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    return Dialog(
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: screenWidth * 0.08,
+        vertical: 24,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Container(
+        width: double.infinity,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.green[50],
+                borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    'Konfirmasi Pesanan',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 17,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            Flexible(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildSectionHeader('Informasi Pelanggan'),
+                    _buildInfoCard([
+                      _buildInfoRow('Nama', customerName),
+                      _buildInfoRow('Keperluan', purpose.name),
+                    ]),
+                    SizedBox(height: 12),
+
+                    _buildSectionHeader('Informasi Ruangan'),
+                    _buildInfoCard([
+                      _buildInfoRow('Restoran', restaurantName),
+                      _buildInfoRow('Ruangan', roomName),
+                      _buildInfoRow('Layout', roomShape),
+                      _buildInfoRow('Kapasitas', '$numberOfPeople orang'),
+                    ]),
+                    SizedBox(height: 12),
+
+                    _buildSectionHeader('Waktu Pengiriman'),
+                    _buildInfoCard([
+                      _buildInfoRow(
+                        'Tanggal & Jam',
+                        DateFormat('dd MMMM yyyy, HH:mm').format(deliveryDateTime),
+                      ),
+                    ]),
+                    SizedBox(height: 12),
+
+                    _buildSectionHeader('Paket yang Dipesan'),
+                    _buildPackageListCard(
+                      selectedPackages.map((sp) => _buildPackageRow(sp)).toList(),
+                    ),
+                    SizedBox(height: 12),
+
+                    if (memo != null && memo!.isNotEmpty) ...[
+                      _buildSectionHeader('Memo'),
+                      _buildMemoCard(memo!),
+                      SizedBox(height: 12),
+                    ],
+
+                    _buildTotalPriceCard(totalPrice),
+                  ],
+                ),
+              ),
+            ),
+
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.grey[300]!)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: onCancel,
+                      style: TextButton.styleFrom(
+                        backgroundColor: Colors.grey[200],
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: Text('Batal', style: TextStyle(color: Colors.black54)),
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: onConfirm,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: Text('Konfirmasi', style: TextStyle(color: Colors.white)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoCard(List<Widget> children) {
+    return Container(
+      width: double.infinity,
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(12),
+          child: Column(
+            children: List.generate(children.length * 2 - 1, (index) {
+              if (index.isOdd) {
+                return Divider(
+                  height: 1,
+                  thickness: 0.5,
+                  color: Colors.grey[300],
+                );
+              }
+              return Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: children[index ~/ 2],
+              );
+            }),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPackageListCard(List<Widget> children) {
+    return Container(
+      width: double.infinity,
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: Container(
+          width: double.infinity,
+          child: Column(
+            children: List.generate(children.length * 2 - 1, (index) {
+              if (index.isOdd) {
+                return Divider(
+                  height: 1,
+                  thickness: 0.5,
+                  color: Colors.grey[300],
+                );
+              }
+              return children[index ~/ 2];
+            }),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMemoCard(String memoText) {
+    return Container( // Add this container
+      width: double.infinity,
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: ExpansionTile(
+          title: Text('Lihat Memo',
+            style: TextStyle(
+              color: Colors.blue,
+              fontWeight: FontWeight.w500,
+              fontSize: 13,
+            ),
+          ),
+          children: [
+            Container( // Add this container
+              width: double.infinity,
+              padding: EdgeInsets.all(12),
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey[300]!),
+                ),
+                padding: EdgeInsets.all(8),
+                child: Text(memoText, style: TextStyle(fontSize: 13)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+  Widget _buildTotalPriceCard(int totalPrice) {
+    return Container( // Add this container
+      width: double.infinity,
+      child: Card(
+        margin: EdgeInsets.zero,
+        color: Colors.green[50],
+        child: Container( // Add this container
+          width: double.infinity,
+          padding: EdgeInsets.all(12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Total Harga',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  )),
+              Text(_formatPrice(totalPrice),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    color: Colors.green[800],
+                  )),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 8),
+      child: Text(title,
+        style: TextStyle(
+          fontSize: 15, // Smaller font
+          fontWeight: FontWeight.bold,
+          color: Colors.grey[800],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 100, // Fixed width for labels to align them
+          child: Text(label,
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+                fontSize: 13,
+              )),
+        ),
+        Expanded(
+          child: Text(value,
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                fontSize: 13,
+              )),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPackageRow(SelectedPackage sp) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Increased horizontal padding
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 3, // Increased flex for more space
+            child: Text(sp.package.name,
+                style: TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13, // Smaller font
+                )),
+          ),
+          SizedBox(width: 12), // Increased spacing
+          Text('${sp.quantity}x',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+                fontSize: 13, // Smaller font
+              )),
+          SizedBox(width: 20), // Increased spacing
+          Text(_formatPrice(sp.package.priceInCents * sp.quantity),
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                fontSize: 13, // Smaller font
+              )),
+        ],
+      ),
+    );
+  }
+
+  String _formatPrice(int priceInCents) {
+    final formatter = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp ',
+      decimalDigits: 0,
+    );
+    return formatter.format(priceInCents);
+  }
+}
+
 class MeetingRoom {
   final String id;
   final String name;
@@ -1433,6 +1801,8 @@ class RestaurantDropdown extends StatefulWidget {
   final bool isLoading;
   final Function(DateTime?) onDateTimeChanged;
   final Function(dynamic) onRoomSelected;
+  final Function() showMemoModal;
+  final String memo;
 
   RestaurantDropdown({
     required this.availableRestaurants,
@@ -1442,6 +1812,8 @@ class RestaurantDropdown extends StatefulWidget {
     required this.onDateTimeChanged,
     required this.onRoomSelected,
     required this.onLayoutSelected,
+    required this.showMemoModal,
+    required this.memo,
   });
 
   @override
@@ -1596,11 +1968,27 @@ class _RestaurantDropdownState extends State<RestaurantDropdown> {
           ],
         ),
         SizedBox(height: 16),
-        ElevatedButton(
-          onPressed: () => _selectDateTime(context),
-          child: Text(selectedDateTime != null
-              ? DateFormat('dd/MM/yyyy HH:mm').format(selectedDateTime!)
-              : 'Pilih Tanggal dan Waktu'),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () => _selectDateTime(context),
+                child: Text(selectedDateTime != null
+                    ? DateFormat('dd/MM/yyyy HH:mm').format(selectedDateTime!)
+                    : 'Pilih Tanggal dan Waktu'),
+              ),
+            ),
+            SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed: () => widget.showMemoModal(),
+              icon: Icon(Icons.note_add),
+              label: Text('Memo'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: widget.memo.isNotEmpty ? Colors.green : Colors.grey,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
         ),
         if (selectedDateTime != null && widget.selectedRestaurant != null)
           isLoadingRooms

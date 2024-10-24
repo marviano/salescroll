@@ -8,6 +8,20 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:salescroll/services/env.dart';
 
+enum TagType { status, people, purpose }
+
+class TagConfig {
+  final Color backgroundColor;
+  final Color textColor;
+  final Color borderColor;
+
+  TagConfig({
+    required this.backgroundColor,
+    required this.textColor,
+    required this.borderColor,
+  });
+}
+
 class CheckOrderPage extends StatefulWidget {
   @override
   _CheckOrderPageState createState() => _CheckOrderPageState();
@@ -21,6 +35,29 @@ class _CheckOrderPageState extends State<CheckOrderPage> {
   void initState() {
     super.initState();
     _fetchOrders();
+  }
+
+  Future<void> _fetchOrders() async {
+    setState(() => _isLoading = true);
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('No user logged in');
+
+      final response = await http.get(
+        Uri.parse('${Env.apiUrl}/api/orders?firebase_uid=${user.uid}'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        setState(() => _orders = json.decode(response.body));
+      } else {
+        throw Exception('Failed to load orders');
+      }
+    } catch (e) {
+      _showErrorDialog('Error fetching orders: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -37,89 +74,369 @@ class _CheckOrderPageState extends State<CheckOrderPage> {
   }
 
   Widget _buildOrderList() {
-    if (_orders.isEmpty) return Center(child: Text('No orders found'));
+    if (_orders.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inbox_outlined, size: 48, color: Colors.grey),
+            SizedBox(height: 16),
+            Text(
+              'No orders found',
+              style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      );
+    }
 
     return ListView.builder(
+      padding: EdgeInsets.all(16),
       itemCount: _orders.length,
       itemBuilder: (context, index) => _buildOrderCard(_orders[index], index),
     );
   }
 
   Widget _buildOrderCard(dynamic order, int index) {
-    final backgroundColor = index % 2 == 0 ? Color(0xFFFFF8F3) : Color(0xFFFFE8D3);
-    final orderId = order['id']?.substring(0, 8) ?? 'N/A';
+    final orderId = order['order_id']?.substring(0, 8) ?? 'N/A';
+    final backgroundColor = index % 2 == 0 ? Colors.green[50] : Colors.white;
+    final numberOfPeople = order['number_of_people']?.toString() ?? 'N/A';
+    final purpose = order['purpose'] ?? 'N/A';
+    final roomName = order['room_name'] ?? 'N/A';
+    final roomLayout = order['room_layout'] ?? 'N/A';
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      child: Card(
-        elevation: 4,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        color: backgroundColor,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: ExpansionTile(
-            tilePadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            title: Text(
-              'Order #$orderId',
-              style: TextStyle(fontWeight: FontWeight.bold),
+    return Card(
+      elevation: 4,
+      margin: EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ExpansionTile(
+        collapsedBackgroundColor: backgroundColor,
+        backgroundColor: backgroundColor,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Order #$orderId',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
             ),
-            subtitle: Column(
+            SizedBox(height: 8),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildTag(
+                      order['status'] ?? 'N/A',
+                      _getTagConfig(TagType.status, order['status'])
+                  ),
+                  SizedBox(width: 8),
+                  _buildTag(
+                      '$numberOfPeople people',
+                      _getTagConfig(TagType.people, null)
+                  ),
+                  SizedBox(width: 8),
+                  _buildTag(
+                      purpose,
+                      _getTagConfig(TagType.purpose, null)
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(height: 8),
+            _buildInfoRow(Icons.business, order['restaurant_name'] ?? 'N/A'),
+            _buildInfoRow(Icons.person, order['customer_name'] ?? 'N/A'),
+            _buildInfoRow(Icons.event, _formatDate(order['delivery_datetime'])),
+            _buildInfoRow(Icons.meeting_room, '$roomName ($roomLayout)'),
+            SizedBox(height: 8),
+            _buildActionButtons(order),
+          ],
+        ),
+        children: [
+          Container(
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(12),
+                bottomRight: Radius.circular(12),
+              ),
+            ),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildOrderSummary(order, backgroundColor),
-                SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    _buildIconButton(Icons.edit, () => _onEditPressed(order)),
-                    SizedBox(width: 12),
-                    _buildIconButton(Icons.track_changes, () => _onTrackPressed(order)),
-                    SizedBox(width: 12),
-                    _buildIconButton(Icons.cancel, () => _onCancelPressed(order)),
-                  ],
+                _buildDetailSection('Order Information', [
+                  _buildDetailRow('Customer', order['customer_name'] ?? 'N/A'),
+                  _buildDetailRow('Restaurant', order['restaurant_name'] ?? 'N/A'),
+                  _buildDetailRow('Purpose', purpose),
+                  _buildDetailRow('Status', order['status'] ?? 'N/A'),
+                  _buildDetailRow('Delivery Date', _formatDate(order['delivery_datetime'])),
+                ]),
+
+                SizedBox(height: 16),
+                _buildDetailSection('Room Details', [
+                  _buildDetailRow('Room', roomName),
+                  _buildDetailRow('Layout', roomLayout),
+                  _buildDetailRow('Capacity', '$numberOfPeople people'),
+                ]),
+
+                SizedBox(height: 16),
+                _buildSectionTitle('Order Items'),
+                _buildPackageDetails(order['package_details']),
+
+                if (order['memo'] != null && order['memo'].toString().isNotEmpty) ...[
+                  SizedBox(height: 16),
+                  _buildDetailSection('Memo', [
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text(
+                        order['memo'],
+                        style: TextStyle(fontStyle: FontStyle.italic),
+                      ),
+                    ),
+                  ]),
+                ],
+
+                SizedBox(height: 16),
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green[200]!),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Total Price',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        _formatPrice(order['total_price'] ?? 0),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Colors.green[800],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-            children: [_buildOrderDetails(order)],
-            childrenPadding: EdgeInsets.zero,
-            trailing: Icon(
-              Icons.expand_more,
-              color: Color(0xFF8D6E63), // Light dark brown color
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailSection(String title, List<Widget> children) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(8),
+                topRight: Radius.circular(8),
+              ),
+            ),
+            child: Text(
+              title,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[800],
+              ),
             ),
           ),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(color: Colors.grey[600]),
+          ),
+          Text(
+            value,
+            style: TextStyle(fontWeight: FontWeight.w500),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPackageDetails(String? packageDetails) {
+    if (packageDetails == null || packageDetails.isEmpty) {
+      return Container(
+        padding: EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey[200]!),
+        ),
+        child: Center(
+          child: Text(
+            'No packages',
+            style: TextStyle(color: Colors.grey[600]),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        children: packageDetails.split('\n').map((package) {
+          return Container(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: Colors.grey[200]!,
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.fastfood, size: 20, color: Colors.grey[600]),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    package,
+                    style: TextStyle(fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildTagRow(List<Widget> tags) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      children: tags,
+    );
+  }
+
+  Widget _buildTag(String text, TagConfig config) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 3), // reduced from 8,4
+      decoration: BoxDecoration(
+        color: config.backgroundColor,
+        borderRadius: BorderRadius.circular(9), // reduced from 12
+        border: Border.all(color: config.borderColor),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 9, // reduced from 12
+          color: config.textColor,
+          fontWeight: FontWeight.w500,
         ),
       ),
     );
   }
 
-  Widget _buildIconButton(IconData icon, VoidCallback onPressed) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(
-          color: Colors.grey[400]!, // Lighter border color
-          width: 1,
-        ),
-        borderRadius: BorderRadius.circular(8),
+  Widget _buildInfoRow(IconData icon, String text) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: Colors.grey[600]),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(fontSize: 14),
+            ),
+          ),
+        ],
       ),
-      child: IconButton(
-        icon: Icon(icon),
+    );
+  }
+
+  Widget _buildActionButtons(dynamic order) {
+    return Row(
+      children: [
+        _buildActionButton(Icons.edit, () => _onEditPressed(order), 'Edit'),
+        SizedBox(width: 8),
+        _buildActionButton(Icons.track_changes, () => _onTrackPressed(order), 'Track'),
+        SizedBox(width: 8),
+        _buildActionButton(Icons.cancel, () => _onCancelPressed(order), 'Cancel'),
+      ],
+    );
+  }
+
+  Widget _buildActionButton(IconData icon, VoidCallback onPressed, String label) {
+    return Expanded(
+      child: OutlinedButton.icon(
         onPressed: onPressed,
-        color: Colors.grey[400], // Lighter icon color to appear disabled
-        padding: EdgeInsets.all(8),
-        constraints: BoxConstraints(minWidth: 40, minHeight: 40),
+        icon: Icon(icon, size: 18),
+        label: Text(label, style: TextStyle(fontSize: 12)),
+        style: OutlinedButton.styleFrom(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          side: BorderSide(color: Colors.grey[400]!),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          color: Colors.grey[800],
+        ),
       ),
     );
   }
 
   void _onEditPressed(dynamic order) {
-    final orderId = order['id']?.substring(0, 8) ?? 'N/A';
+    final orderId = order['order_id']?.substring(0, 8) ?? 'N/A';
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Edit Order #$orderId'),
-        content: Text('Edit functionality for Order #$orderId will be implemented here.'),
+        content: Text('Edit functionality will be implemented here.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -131,12 +448,12 @@ class _CheckOrderPageState extends State<CheckOrderPage> {
   }
 
   void _onTrackPressed(dynamic order) {
-    final orderId = order['id']?.substring(0, 8) ?? 'N/A';
+    final orderId = order['order_id']?.substring(0, 8) ?? 'N/A';
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Track Order #$orderId'),
-        content: Text('Tracking information for Order #$orderId will be displayed here.'),
+        content: Text('Tracking information will be displayed here.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -148,157 +465,43 @@ class _CheckOrderPageState extends State<CheckOrderPage> {
   }
 
   void _onCancelPressed(dynamic order) {
-    final orderId = order['id']?.substring(0, 8) ?? 'N/A';
+    final orderId = order['order_id']?.substring(0, 8) ?? 'N/A';
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Cancel Order #$orderId'),
-        content: Text('Are you sure you want to cancel Order #$orderId?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Column(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 48),
+            SizedBox(height: 8),
+            Text('Cancel Order #$orderId'),
+          ],
+        ),
+        content: Text('Are you sure you want to cancel this order? This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text('No'),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () {
-              // Implement cancellation logic here
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Order #$orderId has been cancelled.')),
+                SnackBar(
+                  content: Text('Order #$orderId has been cancelled.'),
+                  behavior: SnackBarBehavior.floating,
+                ),
               );
             },
-            child: Text('Yes'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: Text('Yes, Cancel Order'),
           ),
         ],
       ),
     );
-  }
-
-  Widget _buildOrderSummary(dynamic order, Color highlightColor) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildHighlightedText('Status: ${order['status'] ?? 'N/A'}', highlightColor),
-        SizedBox(height: 4),
-        _buildHighlightedText('${order['restaurant_name'] ?? 'N/A'}', highlightColor),
-        SizedBox(height: 4),
-        _buildHighlightedText('Delivery: ${_formatDate(order['delivery_datetime'])}', highlightColor),
-        SizedBox(height: 4),
-        _buildHighlightedText('Customer: ${order['customer_name'] ?? 'N/A'}', highlightColor),
-      ],
-    );
-  }
-
-  Widget _buildHighlightedText(String text, Color color) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(text, style: TextStyle(fontWeight: FontWeight.bold)),
-    );
-  }
-
-  Widget _buildOrderDetails(dynamic order) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSection('Order Details', [
-            Text('Restaurant: ${order['restaurant_name'] ?? 'N/A'}'),
-            Text('Purpose: ${order['order_purpose'] ?? 'N/A'}'),
-            Text('Order Date: ${_formatDate(order['order_date'])}'),
-            Text('Delivery Date: ${_formatDate(order['delivery_datetime'])}'),
-          ]),
-          _buildSection('Customer Information', [
-            Text('Name: ${order['customer_name'] ?? 'N/A'}'),
-            Row(
-              children: [
-                Text('Phone: ${_formatPhoneNumber(order['customer_phone'])}'),
-                SizedBox(width: 8),
-                IconButton(
-                  icon: Icon(Icons.copy, size: 20),
-                  onPressed: () => _copyToClipboard(order['customer_phone'] ?? ''),
-                ),
-              ],
-            ),
-          ]),
-          _buildSection('Items', [
-            ...(order['items'] as List? ?? []).map(_buildOrderItem).toList(),
-            SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Total Price', style: TextStyle(fontWeight: FontWeight.bold)),
-                Text(
-                  _calculateTotalPrice(order['items'] ?? []),
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-          ]),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSection(String title, List<Widget> children) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: TextStyle(fontWeight: FontWeight.bold)),
-        SizedBox(height: 8),
-        ...children,
-        SizedBox(height: 16),
-        Divider(height: 1, thickness: 0.5, color: Colors.black.withOpacity(0.2)),
-        SizedBox(height: 16),
-      ],
-    );
-  }
-
-  Widget _buildOrderItem(dynamic item) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(item['package_name'] ?? 'N/A'),
-                Text('Quantity: ${item['quantity'] ?? 'N/A'}'),
-              ],
-            ),
-          ),
-          Text(_formatPrice(((item['price_per_item'] as num?)?.toInt() ?? 0) * ((item['quantity'] as num?)?.toInt() ?? 0))),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _fetchOrders() async {
-    setState(() => _isLoading = true);
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('No user logged in');
-
-      final response = await http.get(
-        Uri.parse('${Env.apiUrl}/api/orders?firebase_uid=${user.uid}'),
-      ).timeout(Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        setState(() => _orders = json.decode(response.body));
-      } else {
-        throw Exception('Failed to load orders');
-      }
-    } catch (e) {
-      _showErrorDialog('Error fetching orders: $e');
-    } finally {
-      setState(() => _isLoading = false);
-    }
   }
 
   void _showErrorDialog(String message) {
@@ -317,19 +520,62 @@ class _CheckOrderPageState extends State<CheckOrderPage> {
     );
   }
 
+  Color _getStatusColor(String? status) {
+    switch (status?.toLowerCase()) {
+      case 'pending':
+        return Colors.orange[700]!;
+      case 'confirmed':
+        return Colors.green[700]!;
+      case 'cancelled':
+        return Colors.red[700]!;
+      default:
+        return Colors.grey[700]!;
+    }
+  }
+
+  TagConfig _getTagConfig(TagType type, String? status) {
+    switch (type) {
+      case TagType.status:
+        final baseColor = _getStatusColor(status);
+        return TagConfig(
+          backgroundColor: baseColor.withOpacity(0.15),
+          textColor: baseColor.withOpacity(0.85),
+          borderColor: baseColor,
+        );
+
+      case TagType.people:
+        return TagConfig(
+          backgroundColor: Colors.blue[50]!,
+          textColor: Colors.blue[700]!,
+          borderColor: Colors.blue[200]!,
+        );
+
+      case TagType.purpose:
+        return TagConfig(
+          backgroundColor: Colors.purple[50]!,
+          textColor: Colors.purple[700]!,
+          borderColor: Colors.purple[200]!,
+        );
+    }
+  }
+
   String _formatDate(String? dateString) {
     if (dateString == null) return 'N/A';
     try {
       final date = DateTime.parse(dateString);
-      return DateFormat('dd - MMMM - yyyy').format(date);
+      return DateFormat('dd MMMM yyyy, HH:mm').format(date);
     } catch (e) {
       return 'Invalid Date';
     }
   }
 
   String _formatPrice(int price) {
-    final formatter = NumberFormat("#,##0", "id_ID");
-    return 'Rp ${formatter.format(price)},-';
+    final formatter = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp ',
+      decimalDigits: 0,
+    );
+    return formatter.format(price);
   }
 
   String _formatPhoneNumber(String? phoneNumber) {
@@ -345,10 +591,5 @@ class _CheckOrderPageState extends State<CheckOrderPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Copied to clipboard')),
     );
-  }
-
-  String _calculateTotalPrice(List<dynamic> items) {
-    int total = items.fold(0, (sum, item) => sum + ((item['price_per_item'] as num?)?.toInt() ?? 0) * ((item['quantity'] as num?)?.toInt() ?? 0));
-    return _formatPrice(total);
   }
 }

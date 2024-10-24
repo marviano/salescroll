@@ -57,27 +57,6 @@ class _CustomerRegistrationFormState extends State<CustomerRegistrationForm> {
     super.dispose();
   }
 
-  // Future<void> _submitForm() async {
-  //   if (_formKey.currentState!.validate()) {
-  //     setState(() => _isLoading = true);
-  //
-  //     try {
-  //       final response = await _sendRegistrationRequest();
-  //       _handleSuccessResponse(response);
-  //     } on SocketException catch (_) {
-  //       NetworkErrorNotifier.instance.notifyError();
-  //       // _showErrorDialog('Koneksi internet terputus. Silakan periksa koneksi Anda dan coba lagi.');
-  //     } on TimeoutException catch (_) {
-  //       NetworkErrorNotifier.instance.notifyError();
-  //       // _showErrorDialog('Waktu permintaan habis. Server mungkin sedang down atau lambat. Silakan coba lagi nanti.');
-  //     } catch (e) {
-  //       NetworkErrorNotifier.instance.notifyError();
-  //       // _showErrorDialog('Gagal menyimpan data pelanggan: $e');
-  //     } finally {
-  //       setState(() => _isLoading = false);
-  //     }
-  //   }
-  // }
   Future<void> _submitForm() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
@@ -104,33 +83,6 @@ class _CustomerRegistrationFormState extends State<CustomerRegistrationForm> {
       }
     }
   }
-
-  // Future<http.Response> _sendRegistrationRequest() async {
-  //   const maxRetries = 3;
-  //   int retryCount = 0;
-  //
-  //   while (retryCount < maxRetries) {
-  //     try {
-  //       return await http.post(
-  //         Uri.parse('${Env.apiUrl}/api/customers'),
-  //         headers: {'Content-Type': 'application/json; charset=UTF-8'},
-  //         body: jsonEncode({
-  //           'name': _nameController.text,
-  //           'phone_number': _phoneController.text,
-  //           'address': _addressController.text,
-  //         }),
-  //       ).timeout(Duration(seconds: 10));
-  //     } catch (e) {
-  //       retryCount++;
-  //       if (retryCount >= maxRetries) {
-  //         rethrow;
-  //       }
-  //       await Future.delayed(Duration(seconds: 2 * retryCount));
-  //     }
-  //   }
-  //
-  //   throw Exception('Max retries reached');
-  // }
 
   Future<http.Response> _sendRegistrationRequest(String firebaseUid) async {
     print('DEBUG: Sending registration request with Firebase UID: $firebaseUid');
