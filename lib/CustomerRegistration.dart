@@ -47,14 +47,91 @@ class _CustomerRegistrationFormState extends State<CustomerRegistrationForm> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
+  final _companyController = TextEditingController();
+  String? _selectedLeadSource;
   bool _isLoading = false;
+
+  final List<String> _leadSources = [
+    'Event Marketing',
+    'Canvas',
+    'Digital Marketing',
+    'Referral',
+    'PoS'
+  ];
 
   @override
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
+    _companyController.dispose();
     super.dispose();
+  }
+
+  Future<http.Response> _sendRegistrationRequest(String firebaseUid) async {
+    final requestBody = jsonEncode({
+      'name': _nameController.text,
+      'phone_number': _phoneController.text,
+      'address': _addressController.text,
+      'firebase_uid': firebaseUid,
+      'company': _companyController.text,
+      'lead_source': _selectedLeadSource,
+    });
+
+    return await http.post(
+      Uri.parse('${Env.apiUrl}/api/customers'),
+      headers: {'Content-Type': 'application/json; charset=UTF-8'},
+      body: requestBody,
+    ).timeout(Duration(seconds: 10));
+  }
+
+  Widget _buildTextFormField(String label, TextEditingController controller, [TextInputType? keyboardType]) {
+    final bool isOptional = label == 'Perusahaan';
+    final displayLabel = isOptional ? '$label (Opsional)' : label;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: 16.0),
+      child: TextFormField(
+        decoration: InputDecoration(
+          labelText: displayLabel,
+          border: OutlineInputBorder(),
+        ),
+        controller: controller,
+        keyboardType: label == 'Nomor Telepon' ? TextInputType.number : keyboardType,
+        inputFormatters: label == 'Nomor Telepon'
+            ? [FilteringTextInputFormatter.digitsOnly]
+            : null,
+        validator: (value) {
+          if (value == null || value.trim().isEmpty) {
+            if (isOptional) {
+              return null; // Company is optional
+            }
+            return 'Mohon masukkan $label';
+          }
+          if (label == 'Nomor Telepon') {
+            if (value.length < 10 || value.length > 15) {
+              return 'Nomor telepon harus antara 10 dan 15 digit';
+            }
+          }
+          return null;
+        },
+      ),
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return Center(
+      child: SizedBox(
+        width: MediaQuery.of(context).size.width * 0.5,
+        child: ElevatedButton(
+          onPressed: _isLoading ? null : _submitForm,
+          child: Text('Kirim'),
+          style: ElevatedButton.styleFrom(
+            padding: EdgeInsets.symmetric(vertical: 16.0),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _submitForm() async {
@@ -71,7 +148,6 @@ class _CustomerRegistrationFormState extends State<CustomerRegistrationForm> {
         if (response.statusCode == 201) {
           _handleSuccessResponse(response);
         } else {
-          // Parse the error message from the response
           final errorBody = json.decode(response.body);
           throw Exception('Server error: ${errorBody['error'] ?? 'Unknown error'}');
         }
@@ -84,26 +160,16 @@ class _CustomerRegistrationFormState extends State<CustomerRegistrationForm> {
     }
   }
 
-  Future<http.Response> _sendRegistrationRequest(String firebaseUid) async {
-    print('DEBUG: Sending registration request with Firebase UID: $firebaseUid');
-    final requestBody = jsonEncode({
-      'name': _nameController.text,
-      'phone_number': _phoneController.text,
-      'address': _addressController.text,
-      'firebase_uid': firebaseUid,
+  void refreshPage() {
+    setState(() {
+      _isLoading = false;
+      _nameController.clear();
+      _phoneController.clear();
+      _addressController.clear();
+      _companyController.clear();
+      _selectedLeadSource = null;
+      _formKey.currentState?.reset();
     });
-    print('DEBUG: Request body: $requestBody');
-
-    final response = await http.post(
-      Uri.parse('${Env.apiUrl}/api/customers'),
-      headers: {'Content-Type': 'application/json; charset=UTF-8'},
-      body: requestBody,
-    ).timeout(Duration(seconds: 10));
-
-    print('DEBUG: Received response with status: ${response.statusCode}');
-    print('DEBUG: Response body: ${response.body}');
-
-    return response;
   }
 
   void _handleSuccessResponse(http.Response response) {
@@ -131,47 +197,30 @@ class _CustomerRegistrationFormState extends State<CustomerRegistrationForm> {
     );
   }
 
-  Widget _buildTextFormField(String label, TextEditingController controller, [TextInputType? keyboardType]) {
-    return TextFormField(
-      decoration: InputDecoration(labelText: label),
-      controller: controller,
-      keyboardType: label == 'Nomor Telepon' ? TextInputType.number : keyboardType,
-      inputFormatters: label == 'Nomor Telepon'
-          ? [FilteringTextInputFormatter.digitsOnly]
-          : null,
-      validator: (value) {
-        if (value == null || value.trim().isEmpty) {
-          return 'Mohon masukkan $label';
-        }
-        if (label == 'Nomor Telepon') {
-          if (value.length < 10 || value.length > 15) {
-            return 'Nomor telepon harus antara 10 dan 15 digit';
-          }
-        }
-        return null;
-      },
-    );
-  }
-
-  Widget _buildSubmitButton() {
-    return Center(
-      child: SizedBox(
-        width: MediaQuery.of(context).size.width * 0.5,
-        child: ElevatedButton(
-          onPressed: _isLoading ? null : _submitForm,
-          child: Text('Kirim'),
+  Widget _buildLeadSourceDropdown() {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 16.0),
+      child: DropdownButtonFormField<String>(
+        decoration: InputDecoration(
+          labelText: 'Lead Source (Opsional)',
+          border: OutlineInputBorder(),
         ),
+        value: _selectedLeadSource,
+        items: _leadSources.map((String value) {
+          return DropdownMenuItem<String>(
+            value: value,
+            child: Text(value),
+          );
+        }).toList(),
+        onChanged: (String? newValue) {
+          setState(() {
+            _selectedLeadSource = newValue;
+          });
+        },
+        isExpanded: true,
+        hint: Text('Pilih lead source'),
       ),
     );
-  }
-
-  void refreshPage() {
-    setState(() {
-      _isLoading = false;
-      _nameController.clear();
-      _phoneController.clear();
-      _addressController.clear();
-    });
   }
 
   @override
@@ -189,6 +238,9 @@ class _CustomerRegistrationFormState extends State<CustomerRegistrationForm> {
               _buildTextFormField('Nama Pelanggan', _nameController),
               _buildTextFormField('Nomor Telepon', _phoneController, TextInputType.number),
               _buildTextFormField('Alamat', _addressController),
+              _buildTextFormField('Perusahaan', _companyController),
+              SizedBox(height: 16),
+              _buildLeadSourceDropdown(),
               SizedBox(height: 20),
               _buildSubmitButton(),
             ],

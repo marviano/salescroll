@@ -45,13 +45,18 @@ class _MasterCustomerFormState extends State<MasterCustomerForm> {
   final _nameController = TextEditingController();
   final _phoneNumberController = TextEditingController();
   final _addressController = TextEditingController();
+  final _companyController = TextEditingController();
   final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
+  String? _selectedLeadSource;
   bool _isLoading = false;
   bool _isSearching = false;
   bool _isEditing = false;
   List<Map<String, dynamic>> _customers = [];
   String? _selectedCustomerId;
   Timer? _debounce;
+
+  final List<String> _leadSources = ['Event Marketing', 'Canvas', 'Digital Marketing', 'Referral', 'PoS'];
 
   @override
   void initState() {
@@ -64,9 +69,31 @@ class _MasterCustomerFormState extends State<MasterCustomerForm> {
     _nameController.dispose();
     _phoneNumberController.dispose();
     _addressController.dispose();
+    _companyController.dispose();
     _searchController.dispose();
+    _scrollController.dispose();
     _debounce?.cancel();
     super.dispose();
+  }
+
+  void _showDialog(String title, String content) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(content),
+          actions: [
+            TextButton(
+              child: Text('OK'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _fetchCustomers() async {
@@ -89,13 +116,6 @@ class _MasterCustomerFormState extends State<MasterCustomerForm> {
     }
   }
 
-  void _onSearchChanged(String query) {
-    if (_debounce?.isActive ?? false) _debounce!.cancel();
-    _debounce = Timer(const Duration(milliseconds: 500), () {
-      _fetchCustomers();
-    });
-  }
-
   Future<void> _submitForm() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
@@ -107,6 +127,9 @@ class _MasterCustomerFormState extends State<MasterCustomerForm> {
             'name': _nameController.text,
             'phone_number': _phoneNumberController.text,
             'address': _addressController.text,
+            'company': _companyController.text,
+            'lead_source': _selectedLeadSource,
+            'firebase_uid': 'your_firebase_uid_here',
           }),
         ).timeout(Duration(seconds: 10));
         if (response.statusCode == 201) {
@@ -114,7 +137,7 @@ class _MasterCustomerFormState extends State<MasterCustomerForm> {
           _clearForm();
           _fetchCustomers();
         } else {
-          throw Exception('Failed to add customer: ${response.statusCode} - ${response.body}');
+          throw Exception('Failed to add customer');
         }
       } catch (e) {
         NetworkErrorNotifier.instance.notifyError();
@@ -135,6 +158,8 @@ class _MasterCustomerFormState extends State<MasterCustomerForm> {
             'name': _nameController.text,
             'phone_number': _phoneNumberController.text,
             'address': _addressController.text,
+            'company': _companyController.text,
+            'lead_source': _selectedLeadSource,
           }),
         ).timeout(Duration(seconds: 10));
         if (response.statusCode == 200) {
@@ -142,7 +167,7 @@ class _MasterCustomerFormState extends State<MasterCustomerForm> {
           _cancelUpdate();
           _fetchCustomers();
         } else {
-          throw Exception('Failed to update customer: ${response.statusCode} - ${response.body}');
+          throw Exception('Failed to update customer');
         }
       } catch (e) {
         NetworkErrorNotifier.instance.notifyError();
@@ -152,32 +177,33 @@ class _MasterCustomerFormState extends State<MasterCustomerForm> {
     }
   }
 
-  void _cancelUpdate() {
-    setState(() {
-      _isEditing = false;
-      _selectedCustomerId = null;
-      _clearForm();
-    });
-  }
-
   void _clearForm() {
     _nameController.clear();
     _phoneNumberController.clear();
     _addressController.clear();
+    _companyController.clear();
+    setState(() => _selectedLeadSource = null);
   }
 
-  void _showDialog(String title, String content) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(content),
-        actions: [
-          TextButton(
-            child: Text('OK'),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
+  Widget _buildFormField({
+    required String label,
+    required TextEditingController controller,
+    String? Function(String?)? validator,
+    int? maxLines,
+    TextInputType? keyboardType,
+  }) {
+    return Container(
+      margin: EdgeInsets.symmetric(vertical: 8.0),
+      child: TextFormField(
+        decoration: InputDecoration(
+          labelText: label,
+          border: OutlineInputBorder(),
+          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: maxLines != null ? 12 : 8),
+        ),
+        controller: controller,
+        validator: validator,
+        maxLines: maxLines,
+        keyboardType: keyboardType,
       ),
     );
   }
@@ -190,7 +216,15 @@ class _MasterCustomerFormState extends State<MasterCustomerForm> {
       physics: NeverScrollableScrollPhysics(),
       children: _customers.map((customer) => ListTile(
         title: Text(customer['name']),
-        subtitle: Text('${customer['phone_number']}\n${customer['address']}'),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(customer['phone_number']),
+            Text(customer['address']),
+            if (customer['company'] != null) Text('Company: ${customer['company']}'),
+            if (customer['lead_source'] != null) Text('Lead Source: ${customer['lead_source']}'),
+          ],
+        ),
         isThreeLine: true,
         trailing: IconButton(
           icon: Icon(Icons.edit),
@@ -201,24 +235,18 @@ class _MasterCustomerFormState extends State<MasterCustomerForm> {
               _nameController.text = customer['name'];
               _phoneNumberController.text = customer['phone_number'];
               _addressController.text = customer['address'];
+              _companyController.text = customer['company'] ?? '';
+              _selectedLeadSource = customer['lead_source'];
             });
+            _scrollController.animateTo(
+              0,
+              duration: Duration(milliseconds: 500),
+              curve: Curves.easeInOut,
+            );
           },
         ),
       )).toList(),
     );
-  }
-
-  void refreshPage() {
-    setState(() {
-      _isLoading = false;
-      _isSearching = false;
-      _isEditing = false;
-      _customers = [];
-      _selectedCustomerId = null;
-      _clearForm();
-      _searchController.clear();
-    });
-    _fetchCustomers();
   }
 
   @override
@@ -227,6 +255,7 @@ class _MasterCustomerFormState extends State<MasterCustomerForm> {
       isLoading: _isLoading,
       loadingText: 'Please wait...',
       child: SingleChildScrollView(
+        controller: _scrollController,
         padding: EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -235,21 +264,42 @@ class _MasterCustomerFormState extends State<MasterCustomerForm> {
               key: _formKey,
               child: Column(
                 children: [
-                  TextFormField(
-                    decoration: InputDecoration(labelText: 'Customer Name'),
+                  _buildFormField(
+                    label: 'Customer Name',
                     controller: _nameController,
                     validator: (value) => value?.isEmpty ?? true ? 'Please enter customer name' : null,
                   ),
-                  TextFormField(
-                    decoration: InputDecoration(labelText: 'Phone Number'),
+                  _buildFormField(
+                    label: 'Phone Number',
                     controller: _phoneNumberController,
                     validator: (value) => value?.isEmpty ?? true ? 'Please enter phone number' : null,
+                    keyboardType: TextInputType.phone,
                   ),
-                  TextFormField(
-                    decoration: InputDecoration(labelText: 'Address'),
+                  _buildFormField(
+                    label: 'Address',
                     controller: _addressController,
                     validator: (value) => value?.isEmpty ?? true ? 'Please enter address' : null,
                     maxLines: 3,
+                  ),
+                  _buildFormField(
+                    label: 'Company',
+                    controller: _companyController,
+                  ),
+                  Container(
+                    margin: EdgeInsets.symmetric(vertical: 8.0),
+                    child: DropdownButtonFormField<String>(
+                      decoration: InputDecoration(
+                        labelText: 'Lead Source',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      value: _selectedLeadSource,
+                      items: _leadSources.map((source) => DropdownMenuItem(
+                        value: source,
+                        child: Text(source),
+                      )).toList(),
+                      onChanged: (value) => setState(() => _selectedLeadSource = value),
+                    ),
                   ),
                   SizedBox(height: 20),
                   Row(
@@ -267,7 +317,10 @@ class _MasterCustomerFormState extends State<MasterCustomerForm> {
                         ElevatedButton(
                           onPressed: _cancelUpdate,
                           child: Text('Cancel Update'),
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white,),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                          ),
                         ),
                     ],
                   ),
@@ -275,15 +328,21 @@ class _MasterCustomerFormState extends State<MasterCustomerForm> {
               ),
             ),
             SizedBox(height: 20),
-            Divider(thickness: 1, color: Colors.grey[300]),
-            SizedBox(height: 20),
-            TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                labelText: 'Search Customers',
-                suffixIcon: Icon(Icons.search),
+            Container(
+              margin: EdgeInsets.symmetric(vertical: 8.0),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  labelText: 'Search Customers',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  suffixIcon: Icon(Icons.search),
+                ),
+                onChanged: (value) {
+                  if (_debounce?.isActive ?? false) _debounce!.cancel();
+                  _debounce = Timer(const Duration(milliseconds: 500), _fetchCustomers);
+                },
               ),
-              onChanged: _onSearchChanged,
             ),
             SizedBox(height: 20),
             Text('Customers:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -292,5 +351,26 @@ class _MasterCustomerFormState extends State<MasterCustomerForm> {
         ),
       ),
     );
+  }
+
+  void _cancelUpdate() {
+    setState(() {
+      _isEditing = false;
+      _selectedCustomerId = null;
+      _clearForm();
+    });
+  }
+
+  void refreshPage() {
+    setState(() {
+      _isLoading = false;
+      _isSearching = false;
+      _isEditing = false;
+      _customers = [];
+      _selectedCustomerId = null;
+      _clearForm();
+      _searchController.clear();
+    });
+    _fetchCustomers();
   }
 }

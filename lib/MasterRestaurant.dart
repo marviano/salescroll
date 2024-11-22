@@ -383,8 +383,20 @@ class _MasterRestaurantFormState extends State<MasterRestaurantForm> {
       shrinkWrap: true,
       physics: NeverScrollableScrollPhysics(),
       children: _restaurants.map((restaurant) => ListTile(
-        title: Text(restaurant['restaurant_name']),
-        subtitle: Text('Status: ${restaurant['status']} | Meeting Rooms: ${restaurant['meeting_rooms']?.length ?? 0}'),
+        title: Text(
+          restaurant['restaurant_name'],
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Status: ${restaurant['status']}'),
+            Text('Meeting Rooms: ${restaurant['meeting_rooms']?.length ?? 0}'),
+          ],
+        ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -413,6 +425,7 @@ class _MasterRestaurantFormState extends State<MasterRestaurantForm> {
             ),
           ],
         ),
+        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       )).toList(),
     );
   }

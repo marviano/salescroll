@@ -1,6 +1,0 @@
-Brandkit Color Guide
-Button submit/kirim: 0xFF8BC34A
-
-### Continue Working On ###
-Test list room jika lebih dari 1 pada salescustomerenrollment, coba ketika udah pilih layout batal dan pilih room lainnya
-Tambahan fasilitas juga jangan lupa, tambahkan berupa note/text aja pada database

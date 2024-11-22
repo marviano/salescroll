@@ -1,0 +1,40 @@
+##### BRANDKIT COLOR GUIDE ####
+Button submit/kirim: 0xFF8BC34A
+
+#### FONT GUIDE LINE ####
+- asset: assets/fonts/FOT-RodinProN-L.otf
+  weight: 300  # Light
+- asset: assets/fonts/FOT-RodinProN-M.otf
+  weight: 400  # Medium/Regular
+- asset: assets/fonts/FOT-RodinProN-B.otf
+  weight: 700  # Bold
+- asset: assets/fonts/FOT-RodinProN-DB.otf
+  weight: 800  # DemiBold
+- asset: assets/fonts/FOT-RodinProN-EB.otf
+  weight: 900  # ExtraBold
+- asset: assets/fonts/FOT-RodinProN-UB.otf
+  weight: 900  # UltraBold
+
+##### DATABASE ####
+The notification_sent column @orders table uses bit flags:
+0 (00) = No notifications sent
+1 (01) = Day before notification sent
+2 (10) = Three hours before notification sent
+3 (11) = Both notifications sent
+
+##### NOTES ####
+- Test list room jika lebih dari 1 pada salescustomerenrollment, coba ketika udah pilih layout batal dan pilih room lainnya
+- Pada "SalesCustomerEnrollment.dart" pada field jumlah orang jika input yang dimasukkan
+    lebih dari kapasitas maka akan muncul error: "right overflowed by x pixels"
+- Jika ada perubahan pada privileges role atau seorang user diberi role tertentu, maka untuk bisa mengakses halaman/menu harus restart app
+
+#### TO DO ####
+[SKIP?] Pilihan paket terkategorisasikan berdasar kategori setiap menu
+
+[DONE] Bisa mengubah detail order yang melakukan sales
+
+[DONE] Juga bisa sewa tanpa pesan paket, kalau pesan paket tidak ada biaya sewa tempat
+
+Tampilkan pesan error jika user tidak sengaja menambahkan restoran yang sama
+
+[DONE] Filter pada check order today, tommorow, next week, next month, certain month

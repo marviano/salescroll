@@ -1,0 +1,92 @@
+################## COMPLETE ORDER DETAILS ##################
+SELECT
+    o.id as order_id,
+    o.delivery_datetime,
+    o.memo,
+    o.status,
+    c.name as customer_name,
+    r.restaurant_name,
+    rs.shape_name as room_layout,
+    mr.room_name,
+    o.number_of_people,
+    op.name as purpose
+FROM orders o
+LEFT JOIN customers c ON o.id_customer = c.id
+LEFT JOIN restaurant r ON o.id_restaurant = r.id
+LEFT JOIN room_shape rs ON o.id_room_shape = rs.id
+LEFT JOIN meeting_room mr ON o.meeting_room_id = mr.id
+LEFT JOIN order_purposes op ON o.id_order_purpose = op.id
+WHERE o.id = '70f30d49-6d9b-44b5-916f-4b617bf734822';
+
+-- Then get package details separately
+SELECT
+    p.package_name,
+    oi.quantity,
+    oi.price_per_item,
+    (oi.quantity * oi.price_per_item) as subtotal
+FROM order_items oi
+INNER JOIN packages p ON oi.id_package = p.id
+WHERE oi.id_order = '70f30d49-6d9b-44b5-916f-4b617bf734822';
+
+-- Or if you want it all in one query with proper package formatting:
+SELECT
+    o.id as order_id,
+    o.delivery_datetime,
+    o.memo,
+    o.status,
+    c.name as customer_name,
+    r.restaurant_name,
+    rs.shape_name as room_layout,
+    mr.room_name,
+    o.number_of_people,
+    op.name as purpose,
+    (
+        SELECT GROUP_CONCAT(
+            CONCAT(p.package_name, ' (', oi.quantity, ' x Rp ', FORMAT(oi.price_per_item, 0), ' = Rp ', FORMAT(oi.quantity * oi.price_per_item, 0), ')')
+            SEPARATOR '\n'
+        )
+        FROM order_items oi
+        INNER JOIN packages p ON oi.id_package = p.id
+        WHERE oi.id_order = o.id
+    ) as package_details,
+    (
+        SELECT SUM(oi.quantity * oi.price_per_item)
+        FROM order_items oi
+        WHERE oi.id_order = o.id
+    ) as total_price
+FROM orders o
+LEFT JOIN customers c ON o.id_customer = c.id
+LEFT JOIN restaurant r ON o.id_restaurant = r.id
+LEFT JOIN room_shape rs ON o.id_room_shape = rs.id
+LEFT JOIN meeting_room mr ON o.meeting_room_id = mr.id
+LEFT JOIN order_purposes op ON o.id_order_purpose = op.id
+WHERE o.id = 'abfb8a0d-ad57-4380-8a27-9d67c43d4b2b';
+
+
+
+################## Testing push notification, by updating astnbp/alvusebastian@gmail.com user's order ##################
+-- Turn off safe updates
+SET SQL_SAFE_UPDATES = 0;
+
+-- Update all orders for specific users
+UPDATE orders
+SET
+    delivery_datetime = DATE_ADD(NOW(), INTERVAL 10 MINUTE),
+    notification_sent = 0
+WHERE firebase_uid IN (
+    'HyBaqdvNO9Y2NFA6vr448Ab0oQv2',  -- first email
+    'ghKGEpqTplaqNWkGjCqr5gXRJDm2'   -- second email
+);
+
+-- Turn safe updates back on
+SET SQL_SAFE_UPDATES = 1;
+
+-- Verify the updates
+SELECT
+    id,
+    delivery_datetime,
+    notification_sent,
+    firebase_uid,
+    TIMESTAMPDIFF(MINUTE, NOW(), delivery_datetime) as minutes_until_delivery
+FROM orders
+ORDER BY delivery_datetime;

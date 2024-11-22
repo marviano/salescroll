@@ -1,6 +1,5 @@
-the 3 tags, please make the font smaller 2pt from now
 
-PLEASE HELP ME DELETE ANY ORDERS THAT HAS NO ORDER ITEMS/PACKAGES
+
 
 My table structure (copy of create table statement)
 CREATE TABLE `customers` (
@@ -11,19 +10,19 @@ CREATE TABLE `customers` (
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `firebase_uid` varchar(28) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `lead_source` enum('Event Marketing','Canvas','Digital Marketing','Referral','PoS') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `company` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `idx_phone_number` (`phone_number`),
   KEY `idx_firebase_uid` (`firebase_uid`),
   CONSTRAINT `fk_customers_users` FOREIGN KEY (`firebase_uid`) REFERENCES `users` (`firebase_uid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 CREATE TABLE `facility` (
   `id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `facility_name` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `idx_facility_name` (`facility_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 CREATE TABLE `meeting_room` (
   `id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `restaurant_id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -36,7 +35,6 @@ CREATE TABLE `meeting_room` (
   KEY `idx_restaurant_id` (`restaurant_id`),
   CONSTRAINT `fk_meeting_room_restaurant` FOREIGN KEY (`restaurant_id`) REFERENCES `restaurant` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 CREATE TABLE `order_items` (
   `id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `id_order` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -51,7 +49,6 @@ CREATE TABLE `order_items` (
   CONSTRAINT `fk_order_items_orders` FOREIGN KEY (`id_order`) REFERENCES `orders` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_order_items_packages` FOREIGN KEY (`id_package`) REFERENCES `packages` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 CREATE TABLE `order_purposes` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(100) NOT NULL,
@@ -62,14 +59,14 @@ CREATE TABLE `order_purposes` (
   PRIMARY KEY (`id`),
   KEY `idx_order_purposes_name` (`name`),
   KEY `idx_order_purposes_name_en` (`name_en`)
-) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8;
-
+) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8;
 CREATE TABLE `orders` (
   `id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `id_customer` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `id_restaurant` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `id_room_shape` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `number_of_people` int(11) NOT NULL,
+  `duration_minutes` int(11) NOT NULL DEFAULT '60',
   `order_date` datetime NOT NULL,
   `delivery_datetime` datetime NOT NULL,
   `status` enum('pending','confirmed','delivered','cancelled') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending',
@@ -79,6 +76,8 @@ CREATE TABLE `orders` (
   `firebase_uid` varchar(28) COLLATE utf8mb4_unicode_ci NOT NULL,
   `memo` text COLLATE utf8mb4_unicode_ci,
   `meeting_room_id` char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `notification_sent` tinyint(3) unsigned NOT NULL DEFAULT '0' COMMENT 'Bitwise flag: 1=day-before, 2=hour-before',
+  `is_room_only` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `idx_id_customer` (`id_customer`),
   KEY `idx_id_restaurant` (`id_restaurant`),
@@ -89,6 +88,9 @@ CREATE TABLE `orders` (
   KEY `fk_orders_users` (`firebase_uid`),
   KEY `fk_orders_room_shape` (`id_room_shape`),
   KEY `idx_meeting_room_id` (`meeting_room_id`),
+  KEY `idx_duration_hours` (`duration_minutes`),
+  KEY `idx_orders_notification` (`status`,`delivery_datetime`,`notification_sent`),
+  KEY `idx_room_only_booking` (`is_room_only`,`meeting_room_id`),
   CONSTRAINT `fk_orders_customers` FOREIGN KEY (`id_customer`) REFERENCES `customers` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_orders_meeting_room` FOREIGN KEY (`meeting_room_id`) REFERENCES `meeting_room` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `fk_orders_order_purposes` FOREIGN KEY (`id_order_purpose`) REFERENCES `order_purposes` (`id`),
@@ -96,7 +98,6 @@ CREATE TABLE `orders` (
   CONSTRAINT `fk_orders_room_shape` FOREIGN KEY (`id_room_shape`) REFERENCES `room_shape` (`id`),
   CONSTRAINT `fk_orders_users` FOREIGN KEY (`firebase_uid`) REFERENCES `users` (`firebase_uid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 CREATE TABLE `packages` (
   `id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `id_restaurant` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -113,18 +114,44 @@ CREATE TABLE `packages` (
   KEY `idx_price` (`price`),
   CONSTRAINT `fk_packages_restaurant` FOREIGN KEY (`id_restaurant`) REFERENCES `restaurant` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `restaurant` (
-  `id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `restaurant_name` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `status` enum('active','inactive') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active',
+CREATE TABLE `permissions` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `description` text COLLATE utf8mb4_unicode_ci,
+  `resource` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `action` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_permission` (`resource`,`action`)
+) ENGINE=InnoDB AUTO_INCREMENT=27 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `permissions` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `description` text COLLATE utf8mb4_unicode_ci,
+  `resource` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `action` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_permission` (`resource`,`action`)
+) ENGINE=InnoDB AUTO_INCREMENT=27 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `role_permissions` (
+  `role_id` int(11) NOT NULL,
+  `permission_id` int(11) NOT NULL,
+  PRIMARY KEY (`role_id`,`permission_id`),
+  KEY `permission_id` (`permission_id`),
+  CONSTRAINT `role_permissions_ibfk_1` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `role_permissions_ibfk_2` FOREIGN KEY (`permission_id`) REFERENCES `permissions` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `roles` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `description` text COLLATE utf8mb4_unicode_ci,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `status` enum('active','inactive') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `idx_restaurant_name` (`restaurant_name`),
-  KEY `idx_status` (`status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
+  UNIQUE KEY `unique_role_name` (`name`)
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `room_added_facility` (
   `room_id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `facility_id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -133,14 +160,12 @@ CREATE TABLE `room_added_facility` (
   CONSTRAINT `fk_added_facility_facility` FOREIGN KEY (`facility_id`) REFERENCES `facility` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_added_facility_room` FOREIGN KEY (`room_id`) REFERENCES `meeting_room` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 CREATE TABLE `room_shape` (
   `id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `shape_name` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `idx_shape_name` (`shape_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 CREATE TABLE `room_supported_shape` (
   `room_id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `shape_id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -149,7 +174,6 @@ CREATE TABLE `room_supported_shape` (
   CONSTRAINT `fk_supported_shape_room` FOREIGN KEY (`room_id`) REFERENCES `meeting_room` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_supported_shape_shape` FOREIGN KEY (`shape_id`) REFERENCES `room_shape` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 CREATE TABLE `users` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `firebase_uid` varchar(28) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -157,7 +181,11 @@ CREATE TABLE `users` (
   `display_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `last_login` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `fcm_token` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `role_id` int(11) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `firebase_uid` (`firebase_uid`),
-  UNIQUE KEY `unique_firebase_uid` (`firebase_uid`)
-) ENGINE=InnoDB AUTO_INCREMENT=18 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  UNIQUE KEY `unique_firebase_uid` (`firebase_uid`),
+  KEY `role_id` (`role_id`),
+  CONSTRAINT `users_ibfk_1` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=33 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
