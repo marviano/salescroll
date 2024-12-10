@@ -156,24 +156,14 @@ class _CheckOrderPageState extends State<CheckOrderPage> {
 
   Future<void> _refreshPage() async {
     if (_isRefreshing) return;
-
-    setState(() => _isRefreshing = true);
-    try {
-      await _fetchOrders();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Page refreshed successfully')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        NetworkErrorNotifier.instance.notifyError();
-        setState(() => _orders = []);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isRefreshing = false);
-      }
+    if (context.mounted) {
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (context, animation1, animation2) => CheckOrderPage(),
+          transitionDuration: Duration.zero,
+        ),
+      );
     }
   }
 
@@ -573,7 +563,7 @@ class _CheckOrderPageState extends State<CheckOrderPage> {
       ),
     );
   }
-  
+
   Widget _buildSearchField(String label, IconData icon, Function(String) onChanged) {
     return SizedBox(
       height: 40,
@@ -1109,6 +1099,32 @@ class _CheckOrderPageState extends State<CheckOrderPage> {
     );
   }
 
+  Future<void> _resetPageState() async {
+    setState(() {
+      _orders = [];
+      _isLoading = false;
+      _isRefreshing = false;
+      _bookingTypeFilter = 'all';
+      _statusFilter = 'pending';
+      _dateRange = null;
+      _restaurantSearch = '';
+      _customerSearch = '';
+      _timeFilter = 'all';
+      _showAdvancedFilters = false;
+      _activeStatusFilter = 'pending';
+    });
+    await _fetchOrders(); // Wait for fetch to complete
+  }
+
+  void _resetAndReload() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CheckOrderPage(),
+      ),
+    );
+  }
+
   void _onCompletePressed(dynamic order) {
     final orderId = order['order_id']?.substring(0, 8) ?? 'N/A';
     showDialog(
@@ -1148,11 +1164,23 @@ class _CheckOrderPageState extends State<CheckOrderPage> {
                 final response = await http.put(
                   Uri.parse('${Env.apiUrl}/api/orders/${order['order_id']}/status'),
                   headers: {'Content-Type': 'application/json'},
-                  body: json.encode({'status': 'completed'}), // Changed from 'delivered' to 'completed'
+                  body: json.encode({'status': 'completed'}),
                 );
 
                 if (response.statusCode == 200) {
                   if (mounted) {
+                    setState(() {
+                      // Update the local order status instead of removing it
+                      final orderIndex = _orders.indexWhere((o) => o['order_id'] == order['order_id']);
+                      if (orderIndex != -1) {
+                        _orders[orderIndex]['status'] = 'completed';
+                        // Remove the order if it doesn't match the current filter
+                        if (_activeStatusFilter != 'all' && _activeStatusFilter != 'completed') {
+                          _orders.removeAt(orderIndex);
+                        }
+                      }
+                    });
+
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('Order #$orderId telah berhasil diselesaikan'),
@@ -1165,7 +1193,6 @@ class _CheckOrderPageState extends State<CheckOrderPage> {
                         ),
                       ),
                     );
-                    _refreshPage();
                   }
                 } else {
                   throw Exception('Gagal memperbarui status order: ${response.statusCode}');
@@ -1281,6 +1308,11 @@ class _CheckOrderPageState extends State<CheckOrderPage> {
 
                 if (response.statusCode == 200) {
                   if (mounted) {
+                    // Update local state to remove the cancelled order
+                    setState(() {
+                      _orders.removeWhere((o) => o['order_id'] == order['order_id']);
+                    });
+
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('Order #$orderId telah dibatalkan'),
@@ -1293,7 +1325,6 @@ class _CheckOrderPageState extends State<CheckOrderPage> {
                         ),
                       ),
                     );
-                    _refreshPage();
                   }
                 } else {
                   throw Exception('Gagal memperbarui status order');

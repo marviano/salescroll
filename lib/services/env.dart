@@ -1,6 +1,6 @@
 class Env {
   // Kantor
-  static const String apiUrl = 'http://192.168.1.208:3000';
+  static const String apiUrl = 'http://182.253.188.172:3000';
   // static const String apiUrl = 'http://192.168.137.1:3000';
   // static const String apiUrl = 'http://salescroll.ath.cx:3000';
 

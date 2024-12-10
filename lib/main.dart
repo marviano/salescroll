@@ -9,7 +9,7 @@ import 'MasterCustomer.dart';
 import 'MasterRestaurant.dart';
 // import 'RestaurantPackages.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'SalesCustomerEnrollment.dart';
+import 'CreateNewOrder.dart';
 import 'widgets/network_error_handler.dart';
 import 'Login.dart';
 import 'CustomerRegistration.dart';

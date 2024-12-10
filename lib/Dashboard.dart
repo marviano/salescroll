@@ -10,8 +10,9 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'MasterUser.dart';
+import 'SalesScroll.dart';
 import 'services/env.dart';
-import 'SalesCustomerEnrollment.dart';
+import 'CreateNewOrder.dart';
 import 'CustomerRegistration.dart';
 import 'MasterRestaurant.dart';
 import 'MasterCustomer.dart';
@@ -19,6 +20,8 @@ import 'CheckOrder.dart';
 import 'RoleManagementPage.dart';
 import 'login.dart';
 import 'UserRoleAssignment.dart';
+import 'ExportOrder.dart';
+import 'ExportCustomerProfile.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({Key? key}) : super(key: key);
@@ -234,6 +237,24 @@ class _DashboardPageState extends State<DashboardPage> {
   List<Widget> _buildMenuItems(BuildContext context) {
     final List<Widget> menuItems = [];
 
+    if (_hasPermission('sales_management', 'view')) {
+      menuItems.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: _buildMenuCard(
+            context,
+            title: 'Sales Management',
+            icon: Icons.trending_up,
+            color: Colors.purple,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => SalesScroll()),
+            ),
+          ),
+        ),
+      );
+    }
+
     // First row - two items
     if (_hasPermission('order_registration', 'view') || _hasPermission('check_order', 'view')) {
       menuItems.add(
@@ -289,6 +310,42 @@ class _DashboardPageState extends State<DashboardPage> {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => CustomerRegistrationPage()),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_hasPermission('data_export', 'view')) {
+      menuItems.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 12.0, left: 16.0, right: 16.0),
+          child: Card(
+            elevation: 4,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: ExpansionTile(
+              title: Text('Export Data', style: TextStyle(fontWeight: FontWeight.bold)),
+              leading: Icon(Icons.download, color: Colors.purple),
+              children: [
+                _buildSubmenuItem(
+                  context,
+                  title: 'Export Order Data',
+                  icon: Icons.receipt_long,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => ExportOrderPage()),  // Changed this line
+                  ),
+                ),
+                _buildSubmenuItem(
+                  context,
+                  title: 'Export Customer Data',
+                  icon: Icons.people,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => ExportCustomerProfilePage()),
+                  ),
+                ),
+              ],
             ),
           ),
         ),

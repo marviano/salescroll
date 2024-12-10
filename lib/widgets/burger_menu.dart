@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../MasterUser.dart';
 import '../services/env.dart';
-import '../SalesCustomerEnrollment.dart';
+import '../CreateNewOrder.dart';
 import '../CustomerRegistration.dart';
 import '../MasterRestaurant.dart';
 import '../MasterCustomer.dart';
@@ -19,6 +19,9 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import '../Dashboard.dart';
 import '../RoleManagementPage.dart';
 import '../UserRoleAssignment.dart';
+import '../ExportOrder.dart';
+import '../ExportCustomerProfile.dart';
+import '../SalesScroll.dart';
 
 enum ActivePage {
   dashboard,
@@ -30,7 +33,11 @@ enum ActivePage {
   checkOrder,
   login,
   roleManagement,
-  userRoleAssignment, masterUser,
+  userRoleAssignment,
+  masterUser,
+  exportOrder,
+  exportCustomer,
+  salesScroll,
 }
 
 class BurgerMenu extends StatefulWidget {
@@ -191,6 +198,19 @@ class _BurgerMenuState extends State<BurgerMenu> {
       ),
     ];
 
+    if (_hasPermission('sales_management', 'view')) {  // Add appropriate permission
+      menuItems.add(_buildListTile(
+        context,
+        'Sales Management',
+        Icons.trending_up,
+        ActivePage.salesScroll,
+            () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => SalesScroll()),
+        ),
+      ));
+    }
+
     // Order Registration
     if (_hasPermission('order_registration', 'view')) {
       menuItems.add(_buildListTile(
@@ -229,6 +249,31 @@ class _BurgerMenuState extends State<BurgerMenu> {
             () => Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => CheckOrderPage()),
+        ),
+      ));
+    }
+
+    // Export Data
+    if (_hasPermission('data_export', 'view')) {
+      menuItems.add(_buildListTile(
+        context,
+        'Export Order Data',
+        Icons.receipt_long,
+        ActivePage.exportOrder,  // Add this to your ActivePage enum
+            () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => ExportOrderPage()),
+        ),
+      ));
+
+      menuItems.add(_buildListTile(
+        context,
+        'Export Customer Data',
+        Icons.people_outline,
+        ActivePage.exportCustomer,
+            () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => ExportCustomerProfilePage()),
         ),
       ));
     }

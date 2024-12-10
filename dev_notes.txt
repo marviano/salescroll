@@ -1,7 +1,17 @@
-##### BRANDKIT COLOR GUIDE ####
-Button submit/kirim: 0xFF8BC34A
+################## BRANDKIT COLOR GUIDE ##################
+Element	Color Code
+Logo	#ffeeda
+Accent	#ffbf80
+Background	#ffffff
+Primary Button	#ff914d
+Button Hover	#ffb380
+Text	#333333
+Links	#ffaa5e
+Success Messages	#b2d8b2
+Error Messages	#ff6b6b
 
-#### FONT GUIDE LINE ####
+
+################## FONT GUIDE LINE ##################
 - asset: assets/fonts/FOT-RodinProN-L.otf
   weight: 300  # Light
 - asset: assets/fonts/FOT-RodinProN-M.otf
@@ -15,26 +25,60 @@ Button submit/kirim: 0xFF8BC34A
 - asset: assets/fonts/FOT-RodinProN-UB.otf
   weight: 900  # UltraBold
 
-##### DATABASE ####
+
+################## DATABASE ##################
 The notification_sent column @orders table uses bit flags:
 0 (00) = No notifications sent
 1 (01) = Day before notification sent
 2 (10) = Three hours before notification sent
 3 (11) = Both notifications sent
 
-##### NOTES ####
-- Test list room jika lebih dari 1 pada salescustomerenrollment, coba ketika udah pilih layout batal dan pilih room lainnya
-- Pada "SalesCustomerEnrollment.dart" pada field jumlah orang jika input yang dimasukkan
-    lebih dari kapasitas maka akan muncul error: "right overflowed by x pixels"
+
+################## BACKEND ##################
+========= PENTING/URGENT/INFO MENGENAI KRITERIA PENGIRIMAN PUSH NOTIFICATION BERDASAR TABEL ORDER =========
+Informasi detail mengenai bagian "async function getUpcomingOrders() {"
+1. Status Order (orders.status):
+   - pending    = Order baru dibuat, belum dikonfirmasi
+   - confirmed  = Order sudah dikonfirmasi
+   - completed  = Order sudah selesai
+   - cancelled  = Order dibatalkan
+
+2. Kriteria Pengiriman Notifikasi:
+   a. Status Check:
+      - Uncomment line dibawah untuk hanya mengirim ke order 'confirmed'
+      - Comment line untuk mengirim ke semua order aktif
+   b. Waktu Delivery:
+      - Hanya order dengan delivery_datetime > waktu sekarang
+      - Maksimal 25 jam kedepan dari sekarang
+   c. FCM Token:
+      - Harus memiliki valid FCM token di users table
+
+3. Notification Windows:
+   - H-1 (24 jam sebelum): Reminder meeting besok
+   - H-0 (3 jam sebelum): Reminder meeting hari ini
+   - Immediate (15 menit sebelum): Reminder segera mulai
+
+4. Notification Flags (orders.notification_sent):
+   - 0 = Belum ada notifikasi
+   - 1 = Notifikasi immediate terkirim
+   - 2 = Notifikasi H-1 terkirim
+   - 4 = Notifikasi 3 jam terkirim
+   Combinations (bitwise OR):
+   - 3 = Immediate(1) + H-1(2)
+   - 5 = Immediate(1) + 3 jam(4)
+   - 6 = H-1(2) + 3 jam(4)
+   - 7 = Semua notifikasi terkirim
+
+
+################## NOTES ##################
+- Pada "SalesCustomerEnrollment.dart" pada field jumlah orang jika input yang dimasukkan lebih dari kapasitas maka akan muncul error: "right overflowed by x pixels"
 - Jika ada perubahan pada privileges role atau seorang user diberi role tertentu, maka untuk bisa mengakses halaman/menu harus restart app
 
-#### TO DO ####
-[SKIP?] Pilihan paket terkategorisasikan berdasar kategori setiap menu
 
-[DONE] Bisa mengubah detail order yang melakukan sales
+################## TO DO ##################
 
-[DONE] Juga bisa sewa tanpa pesan paket, kalau pesan paket tidak ada biaya sewa tempat
-
-Tampilkan pesan error jika user tidak sengaja menambahkan restoran yang sama
-
-[DONE] Filter pada check order today, tommorow, next week, next month, certain month
+Riwayat pesanan customer
+Follow up aktivitas marketing
+List customer categorizatioin with tag, dan ketika di klik bisa mengetahui riwayat terakirnya including last 1/3/6 month/year/never
+Auto linking chat whatsapp
+Kalau 1 bulan gak dihubungi maka free for all
