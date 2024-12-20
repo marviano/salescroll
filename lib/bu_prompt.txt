@@ -1,39 +1,88 @@
 Sales Cycle Management:
-- Track customer status (cold/warm/hot)
-- Monitor progress through sales pipeline
+Track customer status (cold/warm/hot)
+Monitor progress through sales pipeline
+Custom pipeline stages beyond just cold/warm/hot
+Track time spent in each sales stage
+Custom tagging for better customer categorization
 
 Customer Binding System:
-- Bind customers to specific agents
-- Auto-release after 30 days of no interaction
-- Track binding history
+Bind customers to specific agents
+Auto-release after 30 days of no interaction
+Track binding history
+Automated trigger system for releases
+Detailed reason tracking for unbinding
 
 Contact Management:
-- Track all customer interactions (whatsapp/call/visit)
-- Record success/failure of contacts
-- Set follow-up dates
-- Keep interaction notes
+Track all customer interactions (whatsapp/call/visit)
+Record success/failure of contacts
+Set follow-up dates
+Keep interaction notes
+Automatic last interaction date updates
+Contact method effectiveness tracking
 
 Activity Monitoring:
-- Track agent performance
-- Monitor customer engagement
-- See workload distribution
-- Track contact methods effectiveness
+Track agent performance
+Monitor customer engagement
+See workload distribution
+Track contact methods effectiveness
+Detailed agent performance metrics by time period
+Success rate tracking per agent
+Conversion rate monitoring
+Active bindings count per agent
 
 Auto-release System:
-- Customers become available after 30 days no contact
-- System tracks when and why customers were released
-- Keeps history of all binding changes
+Customers become available after 30 days no contact
+System tracks when and why customers were released
+Keeps history of all binding changes
+Automated triggers for release
+Systematic recording of release reasons
 
 This system will be able to:
-- Assign customers to agents
-- Monitor agent performance
-- See which customers need follow-up
-- Analyze sales pipeline
-- Manage customer relationships effectively
-- Ensure no customer gets forgotten
+Assign customers to agents
+Monitor agent performance
+See which customers need follow-up
+Analyze sales pipeline
+Manage customer relationships effectively
+Ensure no customer gets forgotten
+Generate detailed performance reports
+Segment customers with tags
+Track metrics over specific time periods
+Monitor sales pipeline bottlenecks
+Compare agent and team performance
+
+The main new additions from the queries I provided were:
+More detailed performance tracking
+Automated triggers instead of manual checks
+Customer tagging system
+More sophisticated pipeline stages
+Time-based performance metrics
 
 
 My table structure (copy of create table statement)
+CREATE TABLE `customer_binding_history` (
+  `id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `customer_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `bound_to_uid` varchar(28) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `binding_start_date` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `binding_end_date` timestamp NULL DEFAULT NULL,
+  `unbinding_reason` enum('manual','inactivity','period_ended') DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+CREATE TABLE `customer_contacts` (
+  `id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `customer_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `contacted_by_uid` varchar(28) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `contact_method` enum('whatsapp','call','visit') DEFAULT NULL,
+  `contact_status` enum('successful','unsuccessful','pending') NOT NULL,
+  `contact_date` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `notes` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `next_follow_up_date` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_customer_id` (`customer_id`),
+  KEY `contacted_by_uid` (`contacted_by_uid`),
+  CONSTRAINT `customer_contacts_ibfk_1` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `customer_contacts_ibfk_2` FOREIGN KEY (`contacted_by_uid`) REFERENCES `users` (`firebase_uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 CREATE TABLE `customers` (
   `id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -55,16 +104,25 @@ CREATE TABLE `customers` (
   KEY `idx_bound_to_uid` (`bound_to_uid`),
   KEY `idx_sales_status` (`sales_status`),
   KEY `idx_binding_status` (`binding_status`),
-  KEY `idx_last_interaction` (`last_interaction_date`)
-);
-
+  KEY `idx_last_interaction` (`last_interaction_date`),
+  CONSTRAINT `fk_customers_bound_user` FOREIGN KEY (`bound_to_uid`) REFERENCES `users` (`firebase_uid`),
+  CONSTRAINT `fk_customers_users` FOREIGN KEY (`firebase_uid`) REFERENCES `users` (`firebase_uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `facility` (
   `id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `facility_name` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `idx_facility_name` (`facility_name`)
-);
-
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `global_settings` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `setting_key` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `setting_value` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_setting_key` (`setting_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 CREATE TABLE `meeting_room` (
   `id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `restaurant_id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -76,8 +134,7 @@ CREATE TABLE `meeting_room` (
   PRIMARY KEY (`id`),
   KEY `idx_restaurant_id` (`restaurant_id`),
   CONSTRAINT `fk_meeting_room_restaurant` FOREIGN KEY (`restaurant_id`) REFERENCES `restaurant` (`id`) ON DELETE CASCADE
-);
-
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `order_items` (
   `id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `id_order` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -91,8 +148,7 @@ CREATE TABLE `order_items` (
   KEY `idx_id_package` (`id_package`),
   CONSTRAINT `fk_order_items_orders` FOREIGN KEY (`id_order`) REFERENCES `orders` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_order_items_packages` FOREIGN KEY (`id_package`) REFERENCES `packages` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
-);
-
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `order_purposes` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(100) NOT NULL,
@@ -103,8 +159,7 @@ CREATE TABLE `order_purposes` (
   PRIMARY KEY (`id`),
   KEY `idx_order_purposes_name` (`name`),
   KEY `idx_order_purposes_name_en` (`name_en`)
-);
-
+) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8;
 CREATE TABLE `orders` (
   `id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `id_customer` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -136,14 +191,14 @@ CREATE TABLE `orders` (
   KEY `idx_duration_hours` (`duration_minutes`),
   KEY `idx_orders_notification` (`status`,`delivery_datetime`,`notification_sent`),
   KEY `idx_room_only_booking` (`is_room_only`,`meeting_room_id`),
+  KEY `idx_order_expiry` (`status`,`delivery_datetime`),
   CONSTRAINT `fk_orders_customers` FOREIGN KEY (`id_customer`) REFERENCES `customers` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_orders_meeting_room` FOREIGN KEY (`meeting_room_id`) REFERENCES `meeting_room` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `fk_orders_order_purposes` FOREIGN KEY (`id_order_purpose`) REFERENCES `order_purposes` (`id`),
   CONSTRAINT `fk_orders_restaurant` FOREIGN KEY (`id_restaurant`) REFERENCES `restaurant` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_orders_room_shape` FOREIGN KEY (`id_room_shape`) REFERENCES `room_shape` (`id`),
   CONSTRAINT `fk_orders_users` FOREIGN KEY (`firebase_uid`) REFERENCES `users` (`firebase_uid`)
-);
-
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `packages` (
   `id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `id_restaurant` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -159,8 +214,7 @@ CREATE TABLE `packages` (
   KEY `idx_status` (`status`),
   KEY `idx_price` (`price`),
   CONSTRAINT `fk_packages_restaurant` FOREIGN KEY (`id_restaurant`) REFERENCES `restaurant` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
-);
-
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `permissions` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -170,8 +224,7 @@ CREATE TABLE `permissions` (
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_permission` (`resource`,`action`)
-);
-
+) ENGINE=InnoDB AUTO_INCREMENT=29 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `restaurant` (
   `id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `restaurant_name` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -181,8 +234,7 @@ CREATE TABLE `restaurant` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `idx_restaurant_name` (`restaurant_name`),
   KEY `idx_status` (`status`)
-);
-
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `role_permissions` (
   `role_id` int(11) NOT NULL,
   `permission_id` int(11) NOT NULL,
@@ -190,8 +242,7 @@ CREATE TABLE `role_permissions` (
   KEY `permission_id` (`permission_id`),
   CONSTRAINT `role_permissions_ibfk_1` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE,
   CONSTRAINT `role_permissions_ibfk_2` FOREIGN KEY (`permission_id`) REFERENCES `permissions` (`id`) ON DELETE CASCADE
-);
-
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `roles` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -201,8 +252,7 @@ CREATE TABLE `roles` (
   `status` enum('active','inactive') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active',
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_role_name` (`name`)
-);
-
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `room_added_facility` (
   `room_id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `facility_id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -210,15 +260,13 @@ CREATE TABLE `room_added_facility` (
   KEY `idx_facility_id` (`facility_id`),
   CONSTRAINT `fk_added_facility_facility` FOREIGN KEY (`facility_id`) REFERENCES `facility` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_added_facility_room` FOREIGN KEY (`room_id`) REFERENCES `meeting_room` (`id`) ON DELETE CASCADE
-);
-
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `room_shape` (
   `id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `shape_name` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `idx_shape_name` (`shape_name`)
-);
-
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `room_supported_shape` (
   `room_id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
   `shape_id` char(36) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -226,8 +274,7 @@ CREATE TABLE `room_supported_shape` (
   KEY `idx_shape_id` (`shape_id`),
   CONSTRAINT `fk_supported_shape_room` FOREIGN KEY (`room_id`) REFERENCES `meeting_room` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_supported_shape_shape` FOREIGN KEY (`shape_id`) REFERENCES `room_shape` (`id`) ON DELETE CASCADE
-);
-
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `users` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `firebase_uid` varchar(28) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -242,48 +289,4 @@ CREATE TABLE `users` (
   UNIQUE KEY `unique_firebase_uid` (`firebase_uid`),
   KEY `role_id` (`role_id`),
   CONSTRAINT `users_ibfk_1` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`)
-);
-
-CREATE TABLE `customer_binding_history` (
-  `id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `customer_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `bound_to_uid` varchar(28) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `binding_start_date` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `binding_end_date` timestamp NULL DEFAULT NULL,
-  `unbinding_reason` enum('inactivity','manual_release','period_ended') DEFAULT NULL,
-  PRIMARY KEY (`id`)
-);
-
-CREATE TABLE `customer_contacts` (
-  `id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `customer_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `contacted_by_uid` varchar(28) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `contact_method` enum('whatsapp','call','visit') NOT NULL,
-  `contact_status` enum('successful','unsuccessful') NOT NULL,
-  `contact_date` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `notes` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
-  `next_follow_up_date` timestamp NULL DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `idx_customer_id` (`customer_id`),
-  KEY `contacted_by_uid` (`contacted_by_uid`),
-  CONSTRAINT `customer_contacts_ibfk_1` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `customer_contacts_ibfk_2` FOREIGN KEY (`contacted_by_uid`) REFERENCES `users` (`firebase_uid`)
-);
-
-CREATE TABLE `global_settings` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `setting_key` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `setting_value` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `idx_setting_key` (`setting_key`)
-);
-
-CREATE TABLE `room_booking_costs` (
-  `order_id` char(36),
-  `meeting_room_id` char(36),
-  `duration_minutes` int(11),
-  `price_per_hour` bigint(20),
-  `total_room_cost` decimal(10,2)
-);
+) ENGINE=InnoDB AUTO_INCREMENT=34 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
