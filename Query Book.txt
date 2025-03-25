@@ -1,3 +1,4 @@
+
 ################## COMPLETE ORDER DETAILS ##################
 SELECT
     o.id as order_id,
